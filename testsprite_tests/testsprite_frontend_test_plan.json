@@ -1,0 +1,570 @@
+[
+  {
+    "id": "TC001",
+    "title": "User Authentication with Role-Based Access",
+    "description": "Verify that users can successfully log in with correct credentials and are granted access appropriate to their role (admin, manager, analyst). Unauthorized users or incorrect credentials should deny access.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the login page"
+      },
+      {
+        "type": "action",
+        "description": "Attempt login with valid admin credentials"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify login success and admin privileges granted"
+      },
+      {
+        "type": "action",
+        "description": "Log out"
+      },
+      {
+        "type": "action",
+        "description": "Attempt login with valid manager credentials"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify login success and manager privileges granted"
+      },
+      {
+        "type": "action",
+        "description": "Log out"
+      },
+      {
+        "type": "action",
+        "description": "Attempt login with valid analyst credentials"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify login success and analyst privileges granted"
+      },
+      {
+        "type": "action",
+        "description": "Log out"
+      },
+      {
+        "type": "action",
+        "description": "Attempt login with invalid credentials"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify login fails with appropriate error message"
+      },
+      {
+        "type": "action",
+        "description": "Attempt access to restricted pages without login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access is denied and user is redirected to login page"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Dashboard Real-Time Data Display",
+    "description": "Validate that the dashboard shows up-to-date statistics, including reagent, standard, item, instrument counts, pending orders, and upcoming calendar events accurately.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as a manager or admin user"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the main dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify reagent, standard, item, and instrument counts are displayed correctly"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify pending orders count is shown and consistent with orders database"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify calendar events (calibrations/maintenance) for upcoming dates are displayed"
+      },
+      {
+        "type": "action",
+        "description": "Add a new reagent entry and update inventory quantities"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify dashboard updates reagent count in real-time"
+      },
+      {
+        "type": "action",
+        "description": "Simulate an instrument calibration event addition"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify calendar view dynamically reflects the new event"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Reagent CRUD Operations with Inventory Sync",
+    "description": "Test full Create, Read, Update, Delete workflow for reagents including search, filtering, and warehouse stock synchronization ensuring FEFO standards and expiry monitoring.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as admin or manager"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to reagents catalog"
+      },
+      {
+        "type": "action",
+        "description": "Create a new reagent with all required fields and upload an MSDS document"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify reagent appears in catalog and document is properly stored and retrievable"
+      },
+      {
+        "type": "action",
+        "description": "Search for reagent by name and filter by expiry date"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify search and filter results are accurate"
+      },
+      {
+        "type": "action",
+        "description": "Edit reagent details including stock batch data and expiry dates"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify updates are reflected in reagent catalog and warehouse stock"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to delete the reagent entry"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify deletion confirmation prompt appears"
+      },
+      {
+        "type": "action",
+        "description": "Confirm deletion"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify reagent and associated warehouse stock entries are removed"
+      },
+      {
+        "type": "action",
+        "description": "Create a reagent with expiry dates close to current date"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify system correctly triggers expiry alerts in dashboard and reports"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Order Creation and Approval Workflow",
+    "description": "Validate creation, submission, and manager/admin approval of purchase orders with correct permission enforcement and state transitions.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as analyst and navigate to order creation page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new order requesting inventory items"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify order is saved in 'Pending' state"
+      },
+      {
+        "type": "action",
+        "description": "Log out and log in as manager"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to orders awaiting approval"
+      },
+      {
+        "type": "action",
+        "description": "Approve the pending order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify order status updates to 'Approved'"
+      },
+      {
+        "type": "action",
+        "description": "Try to approve the same order again"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify duplicate approval is prevented"
+      },
+      {
+        "type": "action",
+        "description": "Log in as analyst and attempt to approve order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify approval action is not permitted"
+      },
+      {
+        "type": "action",
+        "description": "Cancel a pending order"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify confirmation prompt appears and order status is updated correctly upon confirmation"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Training Sets Management and Inventory Adjustment",
+    "description": "Test creation, updating, and usage tracking of training sets with automatic decrement of relevant inventory stock and audit logging.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as analyst"
+      },
+      {
+        "type": "action",
+        "description": "Create a new training set and assign inventory items"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify training set details are saved and visible"
+      },
+      {
+        "type": "action",
+        "description": "Record usage of inventory items for training batch"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify inventory stock quantities are correctly decremented"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify usage logs are recorded with correct user and timestamp"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to record usage exceeding available stock"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify system prevents usage and displays warning"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Instrument Calibration and Maintenance Logs with Scheduling and Notifications",
+    "description": "Ensure calibration and maintenance logs are created, updated, and statuses changed automatically with correct scheduling and email reminders triggered as expected.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as instrument manager"
+      },
+      {
+        "type": "action",
+        "description": "Create a new instrument entry"
+      },
+      {
+        "type": "action",
+        "description": "Add calibration schedule and maintenance logs for the instrument"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify entries are saved with correct timestamps and status set to 'Scheduled'"
+      },
+      {
+        "type": "action",
+        "description": "Simulate passing of calibration due date"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify calibration status updates to 'Overdue'"
+      },
+      {
+        "type": "action",
+        "description": "Verify that email reminders are sent for upcoming and overdue calibrations"
+      },
+      {
+        "type": "action",
+        "description": "Update calibration logs marking calibration as completed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify calibration status updates to 'Completed' and next due date is recalculated"
+      },
+      {
+        "type": "action",
+        "description": "Upload calibration report and maintenance photos to instrument record"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify documents and images are uploaded, stored properly, and accessible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "AI Chat Interface Integration and Fallback Handling",
+    "description": "Test AI chat assistant functionality querying real-time lab data via n8n webhook, including handling of webhook unavailability with graceful fallback responses.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as any user"
+      },
+      {
+        "type": "action",
+        "description": "Open AI chat interface"
+      },
+      {
+        "type": "action",
+        "description": "Send queries requesting inventory status, instrument data, MSDS info, and operational instructions"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify accurate, up-to-date responses retrieved via n8n webhook"
+      },
+      {
+        "type": "action",
+        "description": "Simulate n8n webhook being unavailable or timing out"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify chat provides fallback response politely indicating service unavailability"
+      },
+      {
+        "type": "action",
+        "description": "Send malformed query"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify chat handles errors gracefully without crashing"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "File Upload and Download Functionality",
+    "description": "Verify that users can upload and download supported files (images, documents, calibration reports, maintenance photos) tied to appropriate inventory or instrument entries with proper storage and retrieval.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in with sufficient privileges"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to reagent or instrument detail page"
+      },
+      {
+        "type": "action",
+        "description": "Upload supported file types including MSDS PDFs, images, and calibration reports"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify upload success notification and file appears in file list"
+      },
+      {
+        "type": "action",
+        "description": "Download an uploaded file"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify file downloads correctly and opens as expected"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to upload unsupported or oversized files"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify upload is rejected with descriptive error message"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Role-Based Access Control Enforcement Across Features",
+    "description": "Confirm that different user roles can access only authorized features and are prevented from unauthorized operations such as deletion, approval, and user management.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as analyst"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access admin user management pages"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access denied or redirect"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to approve purchase orders"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify approval actions are not available"
+      },
+      {
+        "type": "action",
+        "description": "Log in as manager"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to delete user accounts"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify deletion is restricted to admins only"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to perform CRUD operations on inventory"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify CRUD operations permitted for managers and denied for analysts on restricted entities"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Automated Background Jobs Execution Verification",
+    "description": "Validate that background jobs configured in n8n run on schedule, sending email reports and reminders for low stock, expiring items, and calibration events.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Prepare test environment with low stock and expiring inventory items plus upcoming and overdue calibrations"
+      },
+      {
+        "type": "action",
+        "description": "Trigger or wait for scheduled n8n background jobs execution"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify emails are sent to respective stakeholders with accurate report contents"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify emails contain correct details on stock levels, expiry notifications, and calibration reminders"
+      },
+      {
+        "type": "action",
+        "description": "Simulate failure or delay of background job"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify system logs the failure and fallback procedures if any"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Usage Logs Auditing and Accuracy",
+    "description": "Check that usage logs for chemicals and consumables are recorded correctly with user identity and precise timestamps, reflecting actual stock changes.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as analyst"
+      },
+      {
+        "type": "action",
+        "description": "Submit usage entries for chemicals and consumables"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify usage logs record correct user, timestamp, and quantities used"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to submit usage with invalid quantities (negative or exceeding stock)"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify system rejects invalid inputs and displays appropriate error messages"
+      },
+      {
+        "type": "action",
+        "description": "Review audit trail for usage entries"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify logs are immutable and accessible only to authorized users"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "UI Confirmation for Destructive Operations",
+    "description": "Test that potentially destructive actions such as deletions or bulk updates prompt user confirmation dialogs to prevent accidental data loss.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as admin user"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to delete an inventory reagent entry"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a confirmation dialog is displayed with clear options to proceed or cancel"
+      },
+      {
+        "type": "action",
+        "description": "Cancel the deletion"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the reagent remains intact and no data loss occurs"
+      },
+      {
+        "type": "action",
+        "description": "Attempt deletion again and confirm"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the deletion completes successfully and UI updates accordingly"
+      }
+    ]
+  }
+]

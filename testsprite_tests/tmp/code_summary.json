@@ -1,0 +1,174 @@
+{
+    "tech_stack": [
+        "TypeScript",
+        "Next.js 15",
+        "React 19",
+        "Supabase (PostgreSQL, Auth, Storage)",
+        "Drizzle ORM",
+        "Tailwind CSS",
+        "shadcn/ui",
+        "Lucide Icons",
+        "Recharts"
+    ],
+    "features": [
+        {
+            "name": "Authentication",
+            "description": "User login/logout with role-based access (admin, manager, analyst). Uses Supabase Auth with custom username/password/role login flow.",
+            "files": [
+                "src/app/(auth)/login/page.tsx",
+                "src/app/api/auth/login/route.ts",
+                "src/app/api/auth/logout/route.ts",
+                "src/app/api/auth/session/route.ts",
+                "src/lib/services/auth.service.ts",
+                "src/middleware.ts"
+            ]
+        },
+        {
+            "name": "Dashboard",
+            "description": "Main dashboard with statistics charts, recent activities, and quick access to key features. Shows reagent/standard/item/instrument counts and pending orders.",
+            "files": [
+                "src/app/(dashboard)/page.tsx",
+                "src/app/api/dashboard/route.ts"
+            ]
+        },
+        {
+            "name": "Reagents Management",
+            "description": "CRUD operations for reagent catalog. Includes search, filtering, and inventory management.",
+            "files": [
+                "src/app/(dashboard)/inventory/reagents/page.tsx",
+                "src/app/api/inventory/reagents/route.ts",
+                "src/lib/services/reagent.service.ts"
+            ]
+        },
+        {
+            "name": "Standards Management",
+            "description": "CRUD operations for certified reference materials and standards catalog.",
+            "files": [
+                "src/app/(dashboard)/inventory/standards/page.tsx",
+                "src/app/api/inventory/standards/route.ts",
+                "src/app/api/inventory/standards/[id]/route.ts",
+                "src/lib/services/standard.service.ts"
+            ]
+        },
+        {
+            "name": "Items Management",
+            "description": "CRUD operations for consumable items catalog (pipette tips, gloves, etc.).",
+            "files": [
+                "src/app/(dashboard)/inventory/items/page.tsx",
+                "src/app/api/inventory/items/route.ts",
+                "src/app/api/inventory/items/[id]/route.ts",
+                "src/lib/services/item.service.ts"
+            ]
+        },
+        {
+            "name": "Orders Management",
+            "description": "Create and manage purchase orders with approval workflow. Manager/Admin can approve orders.",
+            "files": [
+                "src/app/(dashboard)/inventory/orders/page.tsx",
+                "src/app/api/inventory/orders/route.ts",
+                "src/app/api/inventory/orders/[id]/route.ts",
+                "src/lib/services/order.service.ts"
+            ]
+        },
+        {
+            "name": "Training Sets",
+            "description": "Manage training sets for analyst competency training with detail views.",
+            "files": [
+                "src/app/(dashboard)/inventory/training/page.tsx",
+                "src/app/(dashboard)/inventory/training/[id]/page.tsx",
+                "src/app/api/inventory/training/route.ts",
+                "src/app/api/inventory/training/[id]/route.ts",
+                "src/lib/services/training.service.ts"
+            ]
+        },
+        {
+            "name": "Usage Logs",
+            "description": "Track chemical and item usage with audit logging.",
+            "files": [
+                "src/app/(dashboard)/inventory/usage-logs/page.tsx",
+                "src/app/api/inventory/usage-logs/route.ts",
+                "src/lib/services/usage-log.service.ts"
+            ]
+        },
+        {
+            "name": "Warehouse Chemicals",
+            "description": "Manage individual chemical stock items in warehouse with batch tracking.",
+            "files": [
+                "src/app/(dashboard)/inventory/warehouse-chemicals/page.tsx",
+                "src/app/api/inventory/warehouse-chemicals/route.ts",
+                "src/lib/services/warehouse-chemical.service.ts"
+            ]
+        },
+        {
+            "name": "Warehouse Items",
+            "description": "Manage individual consumable items in warehouse with stock tracking.",
+            "files": [
+                "src/app/(dashboard)/inventory/warehouse-items/page.tsx",
+                "src/app/api/inventory/warehouse-items/route.ts",
+                "src/lib/services/warehouse-item.service.ts"
+            ]
+        },
+        {
+            "name": "Instruments Database",
+            "description": "CRUD operations for laboratory instruments with calibration status tracking and detail views.",
+            "files": [
+                "src/app/(dashboard)/instruments/database/page.tsx",
+                "src/app/(dashboard)/instruments/database/[id]/page.tsx",
+                "src/app/api/instruments/route.ts",
+                "src/app/api/instruments/[id]/route.ts",
+                "src/lib/services/instrument.service.ts"
+            ]
+        },
+        {
+            "name": "Calibration Logs",
+            "description": "Track and manage instrument calibration history with automatic status updates.",
+            "files": [
+                "src/app/(dashboard)/instruments/calibration-logs/page.tsx",
+                "src/app/api/instruments/calibration/route.ts"
+            ]
+        },
+        {
+            "name": "Maintenance Logs",
+            "description": "Track instrument maintenance activities and history.",
+            "files": [
+                "src/app/(dashboard)/instruments/maintenance/page.tsx",
+                "src/app/api/instruments/maintenance/route.ts"
+            ]
+        },
+        {
+            "name": "Admin User Management",
+            "description": "Admin-only user management with create, edit, delete operations. Role assignment for admin/manager/analyst.",
+            "files": [
+                "src/app/(dashboard)/admin/users/page.tsx",
+                "src/app/api/admin/users/route.ts",
+                "src/app/api/admin/users/[id]/route.ts",
+                "src/lib/services/user.service.ts"
+            ]
+        },
+        {
+            "name": "Chat AI",
+            "description": "AI assistant chat interface with n8n webhook integration. Provides fallback responses when webhook unavailable.",
+            "files": [
+                "src/app/(dashboard)/chat/page.tsx",
+                "src/app/api/chat/route.ts",
+                "src/lib/services/chat.service.ts"
+            ]
+        },
+        {
+            "name": "File Upload",
+            "description": "File upload/download service with Supabase Storage. Supports images, documents, calibration reports, and maintenance photos.",
+            "files": [
+                "src/app/api/upload/route.ts",
+                "src/lib/services/storage.service.ts"
+            ]
+        },
+        {
+            "name": "Schedule/Calendar",
+            "description": "Calendar view for scheduled events including calibrations and maintenance.",
+            "files": [
+                "src/app/api/schedule/route.ts",
+                "src/lib/services/schedule.service.ts"
+            ]
+        }
+    ]
+}

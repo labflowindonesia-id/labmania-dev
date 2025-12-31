@@ -1,0 +1,18 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000/C:\\Users\\admin\\Desktop\\AI\\System Projects\\labmania-rev1",
+  "loginUser": "admin",
+  "loginPassword": "123",
+  "executionArgs": {
+    "projectName": "labmania-rev1",
+    "projectPath": "c:\\Users\\admin\\Desktop\\AI\\System Projects\\labmania-rev1",
+    "testIds": [],
+    "additionalInstruction": "Use login credentials: username=admin, password=123, role=admin. For chat testing, only test fallback response as n8n webhook is not active. Test all CRUD operations, file upload (images, documents, calibration-reports, maintenance-photos buckets), and verify all buttons and forms work correctly.",
+    "envs": {
+      "API_KEY": "sk-user-i1f-er7JqH3xAOASQMk6CigBSgT5fHCRNZAYs3PS_7piUuxUgHtn0eOoKUV3xKqNE3ufHNDlT1MmTDZjTNE861fSJ9LqCXvKwXDmXzVIdpS0A9JKXFSOZuLPYPKQULcQUtk"
+    }
+  },
+  "proxy": "http://20393cca-1007-4364-bcbb-9bbb1360957c:L5iTlM935Qo0IAbKCe6k8VIDFCkl3RjH@tun.testsprite.com:8080"
+}

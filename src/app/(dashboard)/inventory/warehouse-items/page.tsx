@@ -1,0 +1,413 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import { Plus, Search, Package, Loader2, RefreshCw } from "lucide-react"
+import { ItemCategory } from "@/types"
+import { useFetch, useMutation } from "@/hooks/use-api"
+
+interface WarehouseItem {
+    id: string
+    catalogId: string
+    name: string
+    specification?: string | null
+    lotNo?: string | null
+    category: ItemCategory
+    currentQuantity: number
+    unit: string
+    receivedDate: string
+    receivedBy?: string
+    receivedByName?: string | null
+    receivedByUser?: { fullName: string } | null
+}
+
+interface CatalogItem {
+    id: string
+    name: string
+    category: 'barang' | 'consumable'
+}
+
+const categoryConfig: Record<ItemCategory, { label: string; color: string }> = {
+    barang: { label: "Barang", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+    consumable: { label: "Consumable", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+}
+
+// Static options for "Diterima Oleh" dropdown
+const receivedByOptions = [
+    { value: "GAP", label: "GAP" },
+    { value: "KEP", label: "KEP" },
+    { value: "Manager", label: "Manager" },
+]
+
+export default function WarehouseItemsPage() {
+    const [search, setSearch] = useState("")
+    const [categoryFilter, setCategoryFilter] = useState<string>("all")
+    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+    const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+
+    // Form state
+    const [formData, setFormData] = useState({
+        catalogId: "",
+        name: "",
+        specification: "",
+        lotNo: "",
+        category: "",
+        quantity: "",
+        unit: "pcs",
+        receivedBy: "",
+    })
+
+    // Fetch catalogs on mount
+    useEffect(() => {
+        const fetchCatalogs = async () => {
+            try {
+                const response = await fetch("/api/inventory/items")
+                const data = await response.json()
+                const items = (data.items || []).map((i: { id: string; name: string; category: string }) => ({
+                    id: i.id,
+                    name: i.name,
+                    category: i.category,
+                }))
+                setCatalogItems(items)
+            } catch (error) {
+                console.error("Error fetching catalogs:", error)
+            }
+        }
+        fetchCatalogs()
+    }, [])
+
+    // Fetch warehouse items from API
+    const { data: items, isLoading, error, refetch } = useFetch<WarehouseItem[]>("/api/inventory/warehouse-items")
+
+    // Create mutation
+    const createItem = useMutation<WarehouseItem, object>(
+        "/api/inventory/warehouse-items",
+        "POST",
+        {
+            onSuccess: () => {
+                refetch()
+                setIsAddDialogOpen(false)
+                setFormData({ catalogId: "", name: "", specification: "", lotNo: "", category: "", quantity: "", unit: "pcs", receivedBy: "" })
+            },
+        }
+    )
+
+    // Handle catalog selection
+    const handleCatalogSelect = (catalogId: string) => {
+        const selected = catalogItems.find(c => c.id === catalogId)
+        if (selected) {
+            setFormData({
+                ...formData,
+                catalogId: selected.id,
+                name: selected.name,
+                category: selected.category,
+            })
+        }
+    }
+
+    // Filter catalog items by category
+    const filteredCatalogItems = formData.category
+        ? catalogItems.filter(c => c.category === formData.category)
+        : catalogItems
+
+    const handleSubmit = async () => {
+        if (!formData.catalogId || !formData.quantity) {
+            return
+        }
+        await createItem.mutate({
+            catalogId: formData.catalogId,
+            name: formData.name,
+            specification: formData.specification || undefined,
+            lotNo: formData.lotNo || undefined,
+            category: formData.category,
+            currentQuantity: parseInt(formData.quantity) || 0,
+            unit: formData.unit,
+            receivedDate: new Date().toISOString().split("T")[0],
+            receivedByName: formData.receivedBy, // Store static value in text field
+        })
+    }
+
+    const filteredItems = (items || []).filter((item) => {
+        const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
+            (item.lotNo && item.lotNo.toLowerCase().includes(search.toLowerCase()))
+        const matchesCategory = categoryFilter === "all" || item.category === categoryFilter
+        return matchesSearch && matchesCategory
+    })
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Memuat data warehouse items...</span>
+            </div>
+        )
+    }
+
+    // Error state
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+                <p className="text-destructive">{error}</p>
+                <Button variant="outline" onClick={() => refetch()}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Coba Lagi
+                </Button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Gudang Barang & Consumable</h1>
+                    <p className="text-muted-foreground">
+                        Detail stok peralatan dan bahan habis pakai
+                    </p>
+                </div>
+                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Terima Barang Baru
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle>Terima Barang Baru</DialogTitle>
+                            <DialogDescription>
+                                Masukkan informasi barang atau consumable yang diterima
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="category">Kategori</Label>
+                                    <Select
+                                        value={formData.category}
+                                        onValueChange={(value) => setFormData({ ...formData, category: value, catalogId: "", name: "" })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih kategori" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="barang">Barang</SelectItem>
+                                            <SelectItem value="consumable">Consumable</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="catalogItem">Pilih Item Katalog</Label>
+                                    <Select
+                                        value={formData.catalogId}
+                                        onValueChange={handleCatalogSelect}
+                                        disabled={!formData.category}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={formData.category ? "Pilih item" : "Pilih kategori dulu"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {filteredCatalogItems.map((item) => (
+                                                <SelectItem key={item.id} value={item.id}>
+                                                    {item.name}
+                                                </SelectItem>
+                                            ))}
+                                            {filteredCatalogItems.length === 0 && (
+                                                <SelectItem value="" disabled>Tidak ada item</SelectItem>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            {formData.name && (
+                                <div className="p-3 bg-muted rounded-lg">
+                                    <p className="text-sm text-muted-foreground">Item terpilih:</p>
+                                    <p className="font-medium">{formData.name}</p>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="specification">Spesifikasi</Label>
+                                    <Input
+                                        id="specification"
+                                        placeholder="Contoh: Class A"
+                                        value={formData.specification}
+                                        onChange={(e) => setFormData({ ...formData, specification: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="lotNo">Lot Number</Label>
+                                    <Input
+                                        id="lotNo"
+                                        placeholder="Contoh: LU-2024-001"
+                                        value={formData.lotNo}
+                                        onChange={(e) => setFormData({ ...formData, lotNo: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="quantity">Jumlah</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            id="quantity"
+                                            type="number"
+                                            placeholder="10"
+                                            value={formData.quantity}
+                                            onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                                        />
+                                        <Select
+                                            value={formData.unit}
+                                            onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                                        >
+                                            <SelectTrigger className="w-24">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="pcs">pcs</SelectItem>
+                                                <SelectItem value="pack">pack</SelectItem>
+                                                <SelectItem value="set">set</SelectItem>
+                                                <SelectItem value="unit">unit</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                {/* Diterima Oleh Dropdown */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="receivedBy">Diterima Oleh</Label>
+                                    <Select
+                                        value={formData.receivedBy}
+                                        onValueChange={(value) => setFormData({ ...formData, receivedBy: value })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih penerima" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {receivedByOptions.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                                Batal
+                            </Button>
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={createItem.isLoading || !formData.catalogId || !formData.quantity}
+                            >
+                                {createItem.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Simpan
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
+
+            {/* Filters */}
+            <div className="flex gap-4">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Cari nama atau lot number..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9"
+                    />
+                </div>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Semua Kategori</SelectItem>
+                        <SelectItem value="barang">Barang</SelectItem>
+                        <SelectItem value="consumable">Consumable</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" onClick={() => refetch()}>
+                    <RefreshCw className="h-4 w-4" />
+                </Button>
+            </div>
+
+            {/* Table - Action column removed */}
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Nama</TableHead>
+                            <TableHead>Spesifikasi/Lot No</TableHead>
+                            <TableHead>Kategori</TableHead>
+                            <TableHead className="text-center">Qty</TableHead>
+                            <TableHead>Satuan</TableHead>
+                            <TableHead>Tgl Terima</TableHead>
+                            <TableHead>Diterima Oleh</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {filteredItems.map((item) => (
+                            <TableRow key={item.id}>
+                                <TableCell className="font-medium">{item.name}</TableCell>
+                                <TableCell>
+                                    {item.specification && <span>{item.specification}</span>}
+                                    {item.lotNo && <span className="text-muted-foreground ml-2">({item.lotNo})</span>}
+                                </TableCell>
+                                <TableCell>
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryConfig[item.category].color}`}>
+                                        {categoryConfig[item.category].label}
+                                    </span>
+                                </TableCell>
+                                <TableCell className="text-center font-medium">{item.currentQuantity}</TableCell>
+                                <TableCell>{item.unit}</TableCell>
+                                <TableCell>{new Date(item.receivedDate).toLocaleDateString("id-ID")}</TableCell>
+                                <TableCell>{item.receivedByName || item.receivedByUser?.fullName || "-"}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+
+            {
+                filteredItems.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                        <p className="text-muted-foreground">Tidak ada item ditemukan</p>
+                    </div>
+                )
+            }
+        </div>
+    )
+}
