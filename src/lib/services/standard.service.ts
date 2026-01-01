@@ -167,9 +167,18 @@ class StandardService {
     }
 
     /**
-     * Delete standard catalog entry
+     * Delete standard catalog entry and associated warehouse records
      */
     async delete(id: string): Promise<boolean> {
+        // First delete associated warehouse records to prevent orphaned data appearing in dashboard
+        await db
+            .delete(schema.warehouseChemicals)
+            .where(and(
+                eq(schema.warehouseChemicals.catalogId, id),
+                eq(schema.warehouseChemicals.catalogType, 'standard')
+            ));
+
+        // Then delete the catalog entry
         await db
             .delete(schema.standardCatalog)
             .where(eq(schema.standardCatalog.id, id));

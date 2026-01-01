@@ -25,7 +25,16 @@ export async function POST(
             );
         }
 
-        const order = await orderService.approve(id, user.id);
+        // Get action from request body
+        const body = await request.json();
+        const action = body.action || 'approve';
+
+        let order;
+        if (action === 'reject') {
+            order = await orderService.reject(id, user.id);
+        } else {
+            order = await orderService.approve(id, user.id);
+        }
 
         if (!order) {
             return NextResponse.json(

@@ -189,60 +189,44 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             </div>
 
             {/* Content */}
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Image Card */}
-                <Card>
-                    <CardContent className="p-6">
-                        <div className="aspect-square bg-muted rounded-lg flex items-center justify-center">
-                            {item.productPhoto ? (
-                                <img src={item.productPhoto} alt={item.name} className="w-full h-full object-cover rounded-lg" />
-                            ) : (
-                                <Package className="h-32 w-32 text-muted-foreground/30" />
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Info Card */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                            Informasi Item
-                            <Badge variant={statusConfig[item.status]?.variant || "default"} className="text-sm">
-                                {statusConfig[item.status]?.label || item.status}
-                            </Badge>
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid gap-4">
-                            <div className="flex items-start gap-3">
-                                <Tag className="h-5 w-5 text-muted-foreground mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Kategori</p>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryConfig[item.category]?.color}`}>
-                                        {categoryConfig[item.category]?.label || item.category}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Lokasi Penyimpanan</p>
-                                    <p className="font-medium">{item.location || "-"}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <Box className="h-5 w-5 text-muted-foreground mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Stok Saat Ini</p>
-                                    <p className="font-medium">{item.currentQuantity} {item.stockUnit}</p>
-                                    <p className="text-xs text-muted-foreground">Minimum stok: {item.minimumStockLevel} {item.stockUnit}</p>
-                                </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                        Informasi Item
+                        <Badge variant={statusConfig[item.status]?.variant || "default"} className="text-sm">
+                            {statusConfig[item.status]?.label || item.status}
+                        </Badge>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid gap-6 md:grid-cols-3">
+                        <div className="flex items-start gap-3">
+                            <Tag className="h-5 w-5 text-muted-foreground mt-0.5" />
+                            <div>
+                                <p className="text-sm text-muted-foreground">Kategori</p>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryConfig[item.category]?.color}`}>
+                                    {categoryConfig[item.category]?.label || item.category}
+                                </span>
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
+                        <div className="flex items-start gap-3">
+                            <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                            <div>
+                                <p className="text-sm text-muted-foreground">Lokasi Penyimpanan</p>
+                                <p className="font-medium">{item.location || "-"}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <Box className="h-5 w-5 text-muted-foreground mt-0.5" />
+                            <div>
+                                <p className="text-sm text-muted-foreground">Stok Saat Ini</p>
+                                <p className="font-medium">{item.currentQuantity} {item.stockUnit}</p>
+                                <p className="text-xs text-muted-foreground">Minimum stok: {item.minimumStockLevel} {item.stockUnit}</p>
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Warehouse History */}
             <Card>

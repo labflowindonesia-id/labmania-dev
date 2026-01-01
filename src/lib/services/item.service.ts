@@ -131,9 +131,15 @@ class ItemService {
     }
 
     /**
-     * Delete item catalog entry
+     * Delete item catalog entry and associated warehouse records
      */
     async delete(id: string): Promise<boolean> {
+        // First delete associated warehouse records to prevent orphaned data
+        await db
+            .delete(schema.warehouseItems)
+            .where(eq(schema.warehouseItems.catalogId, id));
+
+        // Then delete the catalog entry
         await db
             .delete(schema.itemsCatalog)
             .where(eq(schema.itemsCatalog.id, id));

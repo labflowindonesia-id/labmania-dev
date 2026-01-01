@@ -23,12 +23,22 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, Microscope, ChevronDown, Edit, Trash2, Calendar, Eye, Loader2, RefreshCw, Image, X } from "lucide-react"
+import { Plus, Search, Microscope, ChevronDown, Trash2, Calendar, Eye, Loader2, RefreshCw, Image, X } from "lucide-react"
 import { InstrumentStatus, AssetType } from "@/types"
 import { useFetch, useMutation } from "@/hooks/use-api"
 
@@ -46,6 +56,7 @@ interface Instrument {
     scheduleStatus: string
     assetType: AssetType
     location: string
+    picName?: string | null
     picUser?: { fullName: string }
     photo?: string | null
     photoUrl?: string | null
@@ -64,6 +75,8 @@ export default function InstrumentDatabasePage() {
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [openItems, setOpenItems] = useState<string[]>([])
+    const [deleteId, setDeleteId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const [formData, setFormData] = useState({
         name: "",
@@ -155,6 +168,21 @@ export default function InstrumentDatabasePage() {
             return
         }
         await createMutation.mutate(formData)
+    }
+
+    const handleDelete = async () => {
+        if (!deleteId) return
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/instruments/${deleteId}`, { method: "DELETE" })
+            if (!res.ok) throw new Error("Gagal menghapus")
+            refetch()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsDeleting(false)
+            setDeleteId(null)
+        }
     }
 
     const instruments = data?.instruments || []
@@ -411,7 +439,7 @@ export default function InstrumentDatabasePage() {
                                             <div>
                                                 <h3 className="font-semibold">{instrument.name}</h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {instrument.brand} {instrument.model} • {instrument.location}
+                                                    {instrument.brand} {instrument.model} • {instrument.location} {(instrument.picName || instrument.picUser?.fullName) ? `• PIC: ${instrument.picName || instrument.picUser?.fullName}` : ""}
                                                 </p>
                                             </div>
                                         </div>
@@ -443,7 +471,7 @@ export default function InstrumentDatabasePage() {
                                             </div>
                                             <div>
                                                 <p className="text-sm text-muted-foreground">PIC Alat</p>
-                                                <p className="font-medium">{instrument.picUser?.fullName || "-"}</p>
+                                                <p className="font-medium">{instrument.picName || instrument.picUser?.fullName || "-"}</p>
                                             </div>
                                             <div>
                                                 <p className="text-sm text-muted-foreground">Interval</p>
@@ -480,14 +508,15 @@ export default function InstrumentDatabasePage() {
                                                 </Button>
                                             </Link>
                                             <Button variant="outline" size="sm">
-                                                <Edit className="h-4 w-4 mr-2" />
-                                                Edit
-                                            </Button>
-                                            <Button variant="outline" size="sm">
                                                 <Calendar className="h-4 w-4 mr-2" />
                                                 Input Kalibrasi
                                             </Button>
-                                            <Button variant="outline" size="sm" className="text-destructive">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-destructive"
+                                                onClick={() => setDeleteId(instrument.id)}
+                                            >
                                                 <Trash2 className="h-4 w-4 mr-2" />
                                                 Hapus
                                             </Button>
@@ -506,6 +535,29 @@ export default function InstrumentDatabasePage() {
                     <p className="text-muted-foreground">Tidak ada instrumen ditemukan</p>
                 </div>
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Instrumen?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus instrumen ini? Semua data kalibrasi terkait akan ikut terhapus.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Hapus
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

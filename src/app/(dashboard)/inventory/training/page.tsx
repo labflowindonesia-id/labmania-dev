@@ -22,6 +22,16 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Table,
     TableBody,
     TableCell,
@@ -66,6 +76,8 @@ export default function TrainingPage() {
     const [checkResults, setCheckResults] = useState<StockCheckResult[]>([])
     const [isProcessing, setIsProcessing] = useState(false)
     const [isChecking, setIsChecking] = useState(false)
+    const [deleteId, setDeleteId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     // Form state for adding new training set
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -153,6 +165,21 @@ export default function TrainingPage() {
             participantsPerSet: parseInt(newParticipantsPerSet),
             items: newItems.filter(item => item.itemName && item.quantity)
         })
+    }
+
+    const handleDeleteTraining = async () => {
+        if (!deleteId) return
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/inventory/training/${deleteId}`, { method: "DELETE" })
+            if (!res.ok) throw new Error("Gagal menghapus")
+            refetch()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsDeleting(false)
+            setDeleteId(null)
+        }
     }
 
     const trainingSets = data?.trainingSets || []
@@ -519,6 +546,20 @@ export default function TrainingPage() {
                                             {training.items.length === 0 && (
                                                 <p className="text-muted-foreground italic">Belum ada item</p>
                                             )}
+                                            <div className="pt-2 border-t mt-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-destructive hover:text-destructive w-full"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setDeleteId(training.id)
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4 mr-1" />
+                                                    Hapus Training Set
+                                                </Button>
+                                            </div>
                                         </CardContent>
                                     </Card>
                                 )
@@ -530,7 +571,7 @@ export default function TrainingPage() {
 
             {/* Stock Check Dialog */}
             <Dialog open={isCheckDialogOpen} onOpenChange={setIsCheckDialogOpen}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Hasil Pengecekan Stok</DialogTitle>
                         <DialogDescription>
@@ -608,6 +649,29 @@ export default function TrainingPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Training Set?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus training set ini? Semua konfigurasi item akan ikut terhapus.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteTraining}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Hapus
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

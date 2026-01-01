@@ -116,7 +116,7 @@ class ScheduleService {
             });
         }
 
-        // Get maintenance events from maintenance_logs
+        // Get maintenance logs
         const maintenanceLogs = await db.query.maintenanceLogs.findMany({
             with: { instrument: true }
         });
@@ -135,7 +135,7 @@ class ScheduleService {
             });
         }
 
-        // Get order events from orders
+        // Get orders
         const ordersList = await db.query.orders.findMany();
 
         for (const order of ordersList) {
@@ -146,7 +146,7 @@ class ScheduleService {
                 type: 'order',
                 instrumentId: null,
                 location: null,
-                description: `Pesanan ${order.orderNumber} - Status: ${order.status}`,
+                description: `Pesanan ${order.orderNumber} - ${order.status}`,
                 createdAt: order.createdAt,
                 updatedAt: order.updatedAt,
             });

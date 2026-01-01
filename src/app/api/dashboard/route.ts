@@ -1,160 +1,77 @@
 import { NextResponse } from 'next/server';
 import { db, schema } from '@/lib/db';
-import { sql, and, lte, gte, eq } from 'drizzle-orm';
-import { scheduleService } from '@/lib/services/schedule.service';
+import { sql, and, lte, gte } from 'drizzle-orm';
+import { scheduleService } from '@/lib/services';
 
 export async function GET() {
     try {
         const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(today.getDate() + 30);
-        const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
 
-        // ============================================
-        // PARALLEL FETCHING - All independent queries
-        // ============================================
-        const [
-            // Stats queries
-            expiringChemicalsCount,
-            upcomingCalibrationsCount,
+        // Count expiring reagents (within 30 days)
+        const expiringChemicals = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.warehouseChemicals)
+            .where(
+                and(
+                    lte(schema.warehouseChemicals.expiredDate, thirtyDaysFromNow.toISOString().split('T')[0]),
+                    gte(schema.warehouseChemicals.expiredDate, today.toISOString().split('T')[0])
+                )
+            );
 
-            // List queries
-            expiringReagentsList,
-            upcomingCalibrationsList,
+        // Count low stock reagents
+        const reagents = await db.select().from(schema.reagentCatalog);
+        let lowStockCount = 0;
+        let outOfStockCount = 0;
 
-            // Chart data queries
-            instrumentsByStatus,
-            usageLogs,
-
-            // Catalog lists for stock calculation
-            reagentList,
-            standardList,
-            barangList,
-            consumableList,
-
-            // Aggregate stock counts
-            reagentStockCounts,
-            standardStockCounts,
-            barangStockCounts,
-            consumableStockCounts,
-
-            // Calendar events
-            calendarEvents,
-        ] = await Promise.all([
-            // Count expiring chemicals (within 30 days)
-            db.select({ count: sql<number>`count(*)` })
+        for (const reagent of reagents) {
+            const stockResult = await db
+                .select({ count: sql<number>`count(*)` })
                 .from(schema.warehouseChemicals)
-                .where(and(
-                    lte(schema.warehouseChemicals.expiredDate, thirtyDaysStr),
-                    gte(schema.warehouseChemicals.expiredDate, todayStr)
-                )),
+                .where(
+                    and(
+                        sql`${schema.warehouseChemicals.catalogId} = ${reagent.id}`,
+                        sql`${schema.warehouseChemicals.catalogType} = 'reagent'`,
+                        sql`${schema.warehouseChemicals.status} = 'tersedia'`
+                    )
+                );
 
-            // Count upcoming calibrations
-            db.select({ count: sql<number>`count(*)` })
-                .from(schema.instruments)
-                .where(and(
-                    lte(schema.instruments.nextCalibrationDate, thirtyDaysStr),
-                    gte(schema.instruments.nextCalibrationDate, todayStr)
-                )),
+            const stock = Number(stockResult[0]?.count) || 0;
+            if (stock === 0) {
+                outOfStockCount++;
+            } else if (stock < reagent.minimumStockLevel) {
+                lowStockCount++;
+            }
+        }
 
-            // Get expiring reagents list
-            db.select({
+        // Count upcoming calibrations
+        const upcomingCalibrations = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.instruments)
+            .where(
+                and(
+                    lte(schema.instruments.nextCalibrationDate, thirtyDaysFromNow.toISOString().split('T')[0]),
+                    gte(schema.instruments.nextCalibrationDate, today.toISOString().split('T')[0])
+                )
+            );
+
+        // Get expiring reagents list
+        const expiringReagentsList = await db
+            .select({
                 id: schema.warehouseChemicals.id,
                 name: schema.warehouseChemicals.name,
                 expiredDate: schema.warehouseChemicals.expiredDate,
             })
-                .from(schema.warehouseChemicals)
-                .where(and(
-                    lte(schema.warehouseChemicals.expiredDate, thirtyDaysStr),
-                    gte(schema.warehouseChemicals.expiredDate, todayStr)
-                ))
-                .limit(5),
+            .from(schema.warehouseChemicals)
+            .where(
+                and(
+                    lte(schema.warehouseChemicals.expiredDate, thirtyDaysFromNow.toISOString().split('T')[0]),
+                    gte(schema.warehouseChemicals.expiredDate, today.toISOString().split('T')[0])
+                )
+            )
+            .limit(5);
 
-            // Get upcoming calibrations list
-            db.select({
-                id: schema.instruments.id,
-                name: schema.instruments.name,
-                nextCalibrationDate: schema.instruments.nextCalibrationDate,
-                scheduleStatus: schema.instruments.scheduleStatus,
-            })
-                .from(schema.instruments)
-                .where(lte(schema.instruments.nextCalibrationDate, thirtyDaysStr))
-                .limit(5),
-
-            // Instrument status distribution
-            db.select({
-                status: schema.instruments.status,
-                count: sql<number>`count(*)`,
-            })
-                .from(schema.instruments)
-                .groupBy(schema.instruments.status),
-
-            // Usage logs for chart (last 4 months)
-            (() => {
-                const fourMonthsAgo = new Date();
-                fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
-                return db.select({
-                    date: schema.usageLogs.date,
-                    itemType: schema.usageLogs.itemType,
-                    quantity: schema.usageLogs.quantityUsed,
-                })
-                    .from(schema.usageLogs)
-                    .where(gte(schema.usageLogs.date, fourMonthsAgo.toISOString().split('T')[0]));
-            })(),
-
-            // Catalog lists
-            db.select().from(schema.reagentCatalog),
-            db.select().from(schema.standardCatalog),
-            db.select().from(schema.itemsCatalog).where(eq(schema.itemsCatalog.category, 'barang')),
-            db.select().from(schema.itemsCatalog).where(eq(schema.itemsCatalog.category, 'consumable')),
-
-            // OPTIMIZED: Aggregate stock counts with GROUP BY instead of N+1 loops
-            db.select({
-                catalogId: schema.warehouseChemicals.catalogId,
-                count: sql<number>`count(*)`,
-            })
-                .from(schema.warehouseChemicals)
-                .where(and(
-                    eq(schema.warehouseChemicals.catalogType, 'reagent'),
-                    eq(schema.warehouseChemicals.status, 'tersedia')
-                ))
-                .groupBy(schema.warehouseChemicals.catalogId),
-
-            db.select({
-                catalogId: schema.warehouseChemicals.catalogId,
-                count: sql<number>`count(*)`,
-            })
-                .from(schema.warehouseChemicals)
-                .where(and(
-                    eq(schema.warehouseChemicals.catalogType, 'standard'),
-                    eq(schema.warehouseChemicals.status, 'tersedia')
-                ))
-                .groupBy(schema.warehouseChemicals.catalogId),
-
-            db.select({
-                catalogId: schema.warehouseItems.catalogId,
-                total: sql<number>`COALESCE(SUM(${schema.warehouseItems.currentQuantity}), 0)`,
-            })
-                .from(schema.warehouseItems)
-                .groupBy(schema.warehouseItems.catalogId),
-
-            db.select({
-                catalogId: schema.warehouseItems.catalogId,
-                total: sql<number>`COALESCE(SUM(${schema.warehouseItems.currentQuantity}), 0)`,
-            })
-                .from(schema.warehouseItems)
-                .groupBy(schema.warehouseItems.catalogId),
-
-            // Calendar events from schedule service
-            scheduleService.generateCalendarEvents(),
-        ]);
-
-        // ============================================
-        // PROCESS RESULTS
-        // ============================================
-
-        // Format expiring reagents
         const expiringReagentsFormatted = expiringReagentsList.map(r => {
             const expDate = new Date(r.expiredDate);
             const daysLeft = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -162,11 +79,24 @@ export async function GET() {
                 id: r.id,
                 name: r.name,
                 daysLeft,
-                location: 'TC 1',
+                location: 'TC 1', // Default, could be improved
             };
         });
 
-        // Format upcoming calibrations
+        // Get upcoming calibrations list
+        const upcomingCalibrationsList = await db
+            .select({
+                id: schema.instruments.id,
+                name: schema.instruments.name,
+                nextCalibrationDate: schema.instruments.nextCalibrationDate,
+                scheduleStatus: schema.instruments.scheduleStatus,
+            })
+            .from(schema.instruments)
+            .where(
+                lte(schema.instruments.nextCalibrationDate, thirtyDaysFromNow.toISOString().split('T')[0])
+            )
+            .limit(5);
+
         const calibrationsFormatted = upcomingCalibrationsList.map(c => {
             const nextDate = c.nextCalibrationDate ? new Date(c.nextCalibrationDate) : today;
             const daysLeft = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -178,7 +108,20 @@ export async function GET() {
             };
         });
 
-        // Process instrument status chart data
+        // Get schedule events using the service (includes maintenance, orders, calibration, expired)
+        const scheduleEvents = await scheduleService.generateCalendarEvents();
+
+        // === CHART DATA ===
+
+        // 1. Instrument Status Distribution
+        const instrumentsByStatus = await db
+            .select({
+                status: schema.instruments.status,
+                count: sql<number>`count(*)`,
+            })
+            .from(schema.instruments)
+            .groupBy(schema.instruments.status);
+
         const statusColorMap: Record<string, string> = {
             terkalibrasi: '#22c55e',
             jadwal_mendatang: '#3b82f6',
@@ -199,54 +142,72 @@ export async function GET() {
             color: statusColorMap[item.status] || '#94a3b8',
         }));
 
-        // ============================================
-        // OPTIMIZED STOCK CALCULATION - O(n) instead of O(n*m)
-        // ============================================
-
-        // Build lookup maps from aggregate results
-        const reagentStockMap = new Map(reagentStockCounts.map(r => [r.catalogId, Number(r.count)]));
-        const standardStockMap = new Map(standardStockCounts.map(s => [s.catalogId, Number(s.count)]));
-        const itemStockMap = new Map([...barangStockCounts, ...consumableStockCounts].map(i => [i.catalogId, Number(i.total)]));
-
-        // Calculate reagent stock status
+        // 2. Inventory Stock by Category
+        // Reagent stock - calculate based on warehouse count vs minimum
+        const reagentList = await db.select().from(schema.reagentCatalog);
         let reagentTersedia = 0, reagentMenipis = 0, reagentHabis = 0;
-        let lowStockCount = 0, outOfStockCount = 0;
-
         for (const r of reagentList) {
-            const stock = reagentStockMap.get(r.id) || 0;
-            if (stock === 0) {
-                reagentHabis++;
-                outOfStockCount++;
-            } else if (stock <= r.minimumStockLevel) {
-                reagentMenipis++;
-                lowStockCount++;
-            } else {
-                reagentTersedia++;
-            }
+            // Count warehouse items for this reagent
+            const stockResult = await db
+                .select({ count: sql<number>`count(*)` })
+                .from(schema.warehouseChemicals)
+                .where(
+                    and(
+                        sql`${schema.warehouseChemicals.catalogId} = ${r.id}`,
+                        sql`${schema.warehouseChemicals.catalogType} = 'reagent'`,
+                        sql`${schema.warehouseChemicals.status} = 'tersedia'`
+                    )
+                );
+            const stock = Number(stockResult[0]?.count) || 0;
+            if (stock === 0) reagentHabis++;
+            else if (stock <= r.minimumStockLevel) reagentMenipis++;
+            else reagentTersedia++;
         }
 
-        // Calculate standard stock status
+        // Standard stock - calculate based on warehouse count vs minimum
+        const standardList = await db.select().from(schema.standardCatalog);
         let standardTersedia = 0, standardMenipis = 0, standardHabis = 0;
         for (const s of standardList) {
-            const stock = standardStockMap.get(s.id) || 0;
+            const stockResult = await db
+                .select({ count: sql<number>`count(*)` })
+                .from(schema.warehouseChemicals)
+                .where(
+                    and(
+                        sql`${schema.warehouseChemicals.catalogId} = ${s.id}`,
+                        sql`${schema.warehouseChemicals.catalogType} = 'standard'`,
+                        sql`${schema.warehouseChemicals.status} = 'tersedia'`
+                    )
+                );
+            const stock = Number(stockResult[0]?.count) || 0;
             if (stock === 0) standardHabis++;
             else if (stock <= s.minimumStockLevel) standardMenipis++;
             else standardTersedia++;
         }
 
-        // Calculate barang stock status
+        // Items (barang) stock - calculate based on warehouseItems count
+        const barangList = await db.select().from(schema.itemsCatalog).where(sql`${schema.itemsCatalog.category} = 'barang'`);
         let barangTersedia = 0, barangMenipis = 0, barangHabis = 0;
         for (const item of barangList) {
-            const stock = itemStockMap.get(item.id) || 0;
+            // Sum current quantity from warehouse
+            const stockResult = await db
+                .select({ total: sql<number>`COALESCE(SUM(${schema.warehouseItems.currentQuantity}), 0)` })
+                .from(schema.warehouseItems)
+                .where(sql`${schema.warehouseItems.catalogId} = ${item.id}`);
+            const stock = Number(stockResult[0]?.total) || 0;
             if (stock === 0) barangHabis++;
             else if (stock <= item.minimumStockLevel) barangMenipis++;
             else barangTersedia++;
         }
 
-        // Calculate consumable stock status
+        // Consumable stock - calculate based on warehouseItems count
+        const consumableList = await db.select().from(schema.itemsCatalog).where(sql`${schema.itemsCatalog.category} = 'consumable'`);
         let consumableTersedia = 0, consumableMenipis = 0, consumableHabis = 0;
         for (const item of consumableList) {
-            const stock = itemStockMap.get(item.id) || 0;
+            const stockResult = await db
+                .select({ total: sql<number>`COALESCE(SUM(${schema.warehouseItems.currentQuantity}), 0)` })
+                .from(schema.warehouseItems)
+                .where(sql`${schema.warehouseItems.catalogId} = ${item.id}`);
+            const stock = Number(stockResult[0]?.total) || 0;
             if (stock === 0) consumableHabis++;
             else if (stock <= item.minimumStockLevel) consumableMenipis++;
             else consumableTersedia++;
@@ -259,9 +220,20 @@ export async function GET() {
             { category: 'Consumable', tersedia: consumableTersedia, menipis: consumableMenipis, habis: consumableHabis },
         ];
 
-        // ============================================
-        // MONTHLY USAGE DATA
-        // ============================================
+        // 3. Monthly Usage Data (last 4 months)
+        const fourMonthsAgo = new Date();
+        fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
+
+        const usageLogs = await db
+            .select({
+                date: schema.usageLogs.date,
+                itemType: schema.usageLogs.itemType,
+                quantity: schema.usageLogs.quantityUsed,
+            })
+            .from(schema.usageLogs)
+            .where(gte(schema.usageLogs.date, fourMonthsAgo.toISOString().split('T')[0]));
+
+        // Group by month
         const monthlyUsageMap: Record<string, { reagen: number; consumable: number }> = {};
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
@@ -271,7 +243,7 @@ export async function GET() {
             if (!monthlyUsageMap[monthKey]) {
                 monthlyUsageMap[monthKey] = { reagen: 0, consumable: 0 };
             }
-            const qty = parseFloat(log.quantity) || 0;
+            const qty = parseInt(log.quantity) || 0;
             if (log.itemType === 'reagent' || log.itemType === 'standard') {
                 monthlyUsageMap[monthKey].reagen += qty;
             } else {
@@ -292,29 +264,16 @@ export async function GET() {
             });
         }
 
-        // ============================================
-        // FORMAT CALENDAR EVENTS
-        // ============================================
-        const formattedCalendarEvents = calendarEvents.map(event => ({
-            id: event.id,
-            title: event.title,
-            date: event.date,
-            type: event.type,
-            instrumentId: event.instrumentId,
-            location: event.location,
-            description: event.description,
-        }));
-
         return NextResponse.json({
             stats: {
-                expiredReagents: Number(expiringChemicalsCount[0]?.count) || 0,
+                expiredReagents: Number(expiringChemicals[0]?.count) || 0,
                 lowStockItems: lowStockCount,
                 outOfStockItems: outOfStockCount,
-                upcomingCalibrations: Number(upcomingCalibrationsCount[0]?.count) || 0,
+                upcomingCalibrations: Number(upcomingCalibrations[0]?.count) || 0,
             },
             expiringReagents: expiringReagentsFormatted,
             upcomingCalibrations: calibrationsFormatted,
-            scheduleEvents: formattedCalendarEvents,
+            scheduleEvents: scheduleEvents,
             // Chart data
             instrumentStatusData,
             inventoryStockData,

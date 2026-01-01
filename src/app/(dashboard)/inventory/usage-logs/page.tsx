@@ -29,7 +29,17 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Search, ClipboardList, Loader2, RefreshCw, Plus } from "lucide-react"
+import { Search, ClipboardList, Loader2, RefreshCw, Plus, Trash2 } from "lucide-react"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useFetch, useMutation } from "@/hooks/use-api"
 
 interface UsageLog {
@@ -56,6 +66,8 @@ export default function UsageLogsPage() {
     const [search, setSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+    const [deleteId, setDeleteId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     // Form state
     const [formData, setFormData] = useState({
@@ -95,6 +107,21 @@ export default function UsageLogsPage() {
             return
         }
         await createMutation.mutate(formData)
+    }
+
+    const handleDelete = async () => {
+        if (!deleteId) return
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/inventory/usage-logs/${deleteId}`, { method: "DELETE" })
+            if (!res.ok) throw new Error("Gagal menghapus")
+            refetch()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsDeleting(false)
+            setDeleteId(null)
+        }
     }
 
     const usageLogs = data?.usageLogs || []
@@ -285,6 +312,7 @@ export default function UsageLogsPage() {
                             <TableHead>Tipe</TableHead>
                             <TableHead className="text-right">Jumlah</TableHead>
                             <TableHead>Keterangan</TableHead>
+                            <TableHead className="text-center">Aksi</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -302,6 +330,16 @@ export default function UsageLogsPage() {
                                     {log.quantityUsed} {log.unit || ""}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">{log.notes || "-"}</TableCell>
+                                <TableCell className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-destructive hover:text-destructive"
+                                        onClick={() => setDeleteId(log.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
@@ -314,6 +352,29 @@ export default function UsageLogsPage() {
                     <p className="text-muted-foreground">Tidak ada log ditemukan</p>
                 </div>
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Log?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus log penggunaan ini? Tindakan ini tidak dapat dibatalkan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Hapus
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

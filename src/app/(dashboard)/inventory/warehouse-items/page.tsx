@@ -28,7 +28,17 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Plus, Search, Package, Loader2, RefreshCw } from "lucide-react"
+import { Plus, Search, Package, Loader2, RefreshCw, Trash2 } from "lucide-react"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { ItemCategory } from "@/types"
 import { useFetch, useMutation } from "@/hooks/use-api"
 
@@ -70,6 +80,8 @@ export default function WarehouseItemsPage() {
     const [categoryFilter, setCategoryFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+    const [deleteId, setDeleteId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     // Form state
     const [formData, setFormData] = useState({
@@ -151,6 +163,21 @@ export default function WarehouseItemsPage() {
             receivedDate: new Date().toISOString().split("T")[0],
             receivedByName: formData.receivedBy, // Store static value in text field
         })
+    }
+
+    const handleDelete = async () => {
+        if (!deleteId) return
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/inventory/warehouse-items/${deleteId}`, { method: "DELETE" })
+            if (!res.ok) throw new Error("Gagal menghapus")
+            refetch()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsDeleting(false)
+            setDeleteId(null)
+        }
     }
 
     const filteredItems = (items || []).filter((item) => {
@@ -375,6 +402,7 @@ export default function WarehouseItemsPage() {
                             <TableHead>Satuan</TableHead>
                             <TableHead>Tgl Terima</TableHead>
                             <TableHead>Diterima Oleh</TableHead>
+                            <TableHead className="text-center">Aksi</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -394,6 +422,16 @@ export default function WarehouseItemsPage() {
                                 <TableCell>{item.unit}</TableCell>
                                 <TableCell>{new Date(item.receivedDate).toLocaleDateString("id-ID")}</TableCell>
                                 <TableCell>{item.receivedByName || item.receivedByUser?.fullName || "-"}</TableCell>
+                                <TableCell className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-destructive hover:text-destructive"
+                                        onClick={() => setDeleteId(item.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
@@ -408,6 +446,29 @@ export default function WarehouseItemsPage() {
                     </div>
                 )
             }
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Item?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus item ini dari gudang? Tindakan ini tidak dapat dibatalkan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Hapus
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

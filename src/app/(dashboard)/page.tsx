@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { addDays } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -56,8 +57,27 @@ interface DashboardData {
 }
 
 
-// Empty fallback for schedule events
-const defaultScheduleEvents: ScheduleEvent[] = []
+// Default mock schedule events (fallback)
+const defaultScheduleEvents: ScheduleEvent[] = [
+    {
+        id: "1",
+        title: "HPLC Kalibrasi",
+        date: addDays(new Date(), 2),
+        type: "calibration",
+        instrumentName: "HPLC Agilent 1260",
+        location: "Lab Analisis",
+        description: "Kalibrasi rutin HPLC untuk memastikan akurasi pengukuran"
+    },
+    {
+        id: "2",
+        title: "GC-MS Maintenance",
+        date: addDays(new Date(), 3),
+        type: "maintenance",
+        instrumentName: "GC-MS Shimadzu",
+        location: "Lab Organik",
+        description: "Pemeliharaan berkala dan penggantian kolom"
+    },
+]
 
 // Default fallback chart data
 const defaultInstrumentStatusData = [
@@ -105,7 +125,7 @@ export default function DashboardPage() {
                     },
                     expiringReagents: [],
                     upcomingCalibrations: [],
-                    scheduleEvents: [],
+                    scheduleEvents: defaultScheduleEvents,
                     instrumentStatusData: defaultInstrumentStatusData,
                     inventoryStockData: defaultInventoryStockData,
                     monthlyUsageData: defaultMonthlyUsageData,
@@ -135,7 +155,7 @@ export default function DashboardPage() {
                 },
                 expiringReagents: [],
                 upcomingCalibrations: [],
-                scheduleEvents: [],
+                scheduleEvents: defaultScheduleEvents,
                 instrumentStatusData: defaultInstrumentStatusData,
                 inventoryStockData: defaultInventoryStockData,
                 monthlyUsageData: defaultMonthlyUsageData,

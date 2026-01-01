@@ -166,10 +166,19 @@ class ReagentService {
     }
 
     /**
-     * Delete reagent catalog entry
+     * Delete reagent catalog entry and associated warehouse records
      */
     async delete(id: string): Promise<boolean> {
-        const result = await db
+        // First delete associated warehouse records to prevent orphaned data
+        await db
+            .delete(schema.warehouseChemicals)
+            .where(and(
+                eq(schema.warehouseChemicals.catalogId, id),
+                eq(schema.warehouseChemicals.catalogType, 'reagent')
+            ));
+
+        // Then delete the catalog entry
+        await db
             .delete(schema.reagentCatalog)
             .where(eq(schema.reagentCatalog.id, id));
         return true;

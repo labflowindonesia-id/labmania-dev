@@ -30,7 +30,17 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, ShoppingCart, Eye, Check, X, Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Search, ShoppingCart, Check, X, Loader2, RefreshCw, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { OrderStatus } from "@/types"
 import { useFetch, useMutation } from "@/hooks/use-api"
 
@@ -71,6 +81,8 @@ export default function OrdersPage() {
     const [newOrderItems, setNewOrderItems] = useState("")
     const [newOrderNotes, setNewOrderNotes] = useState("")
     const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+    const [deleteId, setDeleteId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const toggleExpand = (orderId: string) => {
         const newExpanded = new Set(expandedOrders)
@@ -139,6 +151,21 @@ export default function OrdersPage() {
             body: JSON.stringify({ action: "reject" }),
         })
         refetch()
+    }
+
+    const handleDelete = async () => {
+        if (!deleteId) return
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/inventory/orders/${deleteId}`, { method: "DELETE" })
+            if (!res.ok) throw new Error("Gagal menghapus")
+            refetch()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsDeleting(false)
+            setDeleteId(null)
+        }
     }
 
     const filteredOrders = (orders || []).filter((order) => {
@@ -319,9 +346,6 @@ export default function OrdersPage() {
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-1">
-                                        <Button variant="ghost" size="icon">
-                                            <Eye className="h-4 w-4" />
-                                        </Button>
                                         {order.status === "pending" && (
                                             <>
                                                 <Button
@@ -342,6 +366,14 @@ export default function OrdersPage() {
                                                 </Button>
                                             </>
                                         )}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => setDeleteId(order.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -356,6 +388,29 @@ export default function OrdersPage() {
                     <p className="text-muted-foreground">Tidak ada pesanan ditemukan</p>
                 </div>
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Pesanan?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Apakah Anda yakin ingin menghapus pesanan ini? Tindakan ini tidak dapat dibatalkan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Hapus
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

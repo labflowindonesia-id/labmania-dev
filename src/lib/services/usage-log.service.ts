@@ -117,6 +117,14 @@ class UsageLogService {
 
         return summary;
     }
+
+    /**
+     * Delete usage log by ID
+     */
+    async delete(id: string): Promise<boolean> {
+        await db.delete(schema.usageLogs).where(eq(schema.usageLogs.id, id));
+        return true;
+    }
 }
 
 export const usageLogService = new UsageLogService();
