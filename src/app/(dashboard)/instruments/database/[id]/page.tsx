@@ -288,10 +288,6 @@ export default function InstrumentDetailPage({ params }: { params: Promise<{ id:
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                     </Button>
-                    <Button>
-                        <Calendar className="h-4 w-4 mr-2" />
-                        Input Kalibrasi
-                    </Button>
                 </div>
             </div>
 

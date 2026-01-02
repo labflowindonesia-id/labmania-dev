@@ -6,6 +6,8 @@ import { use } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ArrowLeft, Edit, Trash2, Package, MapPin, Box, Tag, Loader2 } from "lucide-react"
 import { StockStatus, ItemCategory } from "@/types"
 import {
@@ -19,6 +21,22 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     Table,
     TableBody,
@@ -64,6 +82,9 @@ const categoryConfig: Record<ItemCategory, { label: string; color: string }> = {
     consumable: { label: "Consumable", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
 }
 
+const locations = ["TC 1", "TC 2", "TC 3"]
+const stockUnits = ["pcs", "box", "pack", "unit", "set", "rol"]
+
 export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter()
     const resolvedParams = use(params)
@@ -73,28 +94,50 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     const [error, setError] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
-    useEffect(() => {
-        const fetchItem = async () => {
-            try {
-                setIsLoading(true)
-                const response = await fetch(`/api/inventory/items/${resolvedParams.id}`)
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        setError("Item tidak ditemukan")
-                    } else {
-                        setError("Gagal mengambil data item")
-                    }
-                    return
+    // Edit states
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [isEditing, setIsEditing] = useState(false)
+    const [editForm, setEditForm] = useState({
+        name: "",
+        brand: "",
+        category: "" as ItemCategory | "",
+        stockUnit: "",
+        minimumStockLevel: 0,
+        location: "",
+    })
+
+    const fetchItem = async () => {
+        try {
+            setIsLoading(true)
+            const response = await fetch(`/api/inventory/items/${resolvedParams.id}`)
+            if (!response.ok) {
+                if (response.status === 404) {
+                    setError("Item tidak ditemukan")
+                } else {
+                    setError("Gagal mengambil data item")
                 }
-                const data = await response.json()
-                setItem(data.item)
-                setWarehouseRecords(data.warehouseRecords || [])
-            } catch (err) {
-                setError("Terjadi kesalahan saat mengambil data")
-            } finally {
-                setIsLoading(false)
+                return
             }
+            const data = await response.json()
+            setItem(data.item)
+            setWarehouseRecords(data.warehouseRecords || [])
+            // Initialize edit form
+            setEditForm({
+                name: data.item.name || "",
+                brand: data.item.brand || "",
+                category: data.item.category || "",
+                stockUnit: data.item.stockUnit || "",
+                minimumStockLevel: data.item.minimumStockLevel || 0,
+                location: data.item.location || "",
+            })
+        } catch (err) {
+            setError("Terjadi kesalahan saat mengambil data")
+        } finally {
+            setIsLoading(false)
         }
+    }
+
+    useEffect(() => {
         fetchItem()
     }, [resolvedParams.id])
 
@@ -113,6 +156,27 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             setError("Terjadi kesalahan saat menghapus")
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    const handleEdit = async () => {
+        try {
+            setIsEditing(true)
+            const response = await fetch(`/api/inventory/items/${resolvedParams.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editForm),
+            })
+            if (response.ok) {
+                setIsEditDialogOpen(false)
+                fetchItem() // Refresh data
+            } else {
+                setError("Gagal mengupdate item")
+            }
+        } catch (err) {
+            setError("Terjadi kesalahan saat mengupdate")
+        } finally {
+            setIsEditing(false)
         }
     }
 
@@ -155,10 +219,107 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                    </Button>
+                    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                                <DialogTitle>Edit Item</DialogTitle>
+                                <DialogDescription>
+                                    Ubah informasi item di bawah ini.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="name">Nama Item *</Label>
+                                    <Input
+                                        id="name"
+                                        value={editForm.name}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="brand">Merek</Label>
+                                        <Input
+                                            id="brand"
+                                            value={editForm.brand}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, brand: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="category">Kategori</Label>
+                                        <Select
+                                            value={editForm.category}
+                                            onValueChange={(value: ItemCategory) => setEditForm(prev => ({ ...prev, category: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih kategori" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="barang">Barang</SelectItem>
+                                                <SelectItem value="consumable">Consumable</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="stockUnit">Satuan</Label>
+                                        <Select
+                                            value={editForm.stockUnit}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, stockUnit: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih satuan" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {stockUnits.map((unit) => (
+                                                    <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="location">Lokasi</Label>
+                                        <Select
+                                            value={editForm.location}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, location: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih lokasi" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {locations.map((loc) => (
+                                                    <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="minimumStockLevel">Minimum Stok Level</Label>
+                                    <Input
+                                        id="minimumStockLevel"
+                                        type="number"
+                                        value={editForm.minimumStockLevel}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, minimumStockLevel: parseInt(e.target.value) || 0 }))}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Batal</Button>
+                                <Button onClick={handleEdit} disabled={isEditing || !editForm.name}>
+                                    {isEditing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Simpan
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button variant="destructive" disabled={isDeleting}>

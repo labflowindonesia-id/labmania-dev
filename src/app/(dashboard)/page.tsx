@@ -108,14 +108,68 @@ export default function DashboardPage() {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        fetchDashboardData()
-    }, [])
+        // Create AbortController to handle cleanup and prevent race conditions
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-    const fetchDashboardData = async () => {
-        try {
-            const response = await fetch("/api/dashboard")
-            if (!response.ok) {
-                // Use fallback data if API fails
+        const fetchDashboardData = async () => {
+            console.log('[Dashboard] Starting fetch...')
+            try {
+                const response = await fetch("/api/dashboard", {
+                    signal: controller.signal
+                })
+                clearTimeout(timeoutId)
+
+                // Check if the request was aborted (component unmounted)
+                if (controller.signal.aborted) {
+                    console.log('[Dashboard] Fetch aborted (cleanup)')
+                    return
+                }
+
+                if (!response.ok) {
+                    console.log('[Dashboard] Response not ok, using fallback')
+                    setDashboardData({
+                        stats: {
+                            expiredReagents: 0,
+                            lowStockItems: 0,
+                            outOfStockItems: 0,
+                            upcomingCalibrations: 0,
+                        },
+                        expiringReagents: [],
+                        upcomingCalibrations: [],
+                        scheduleEvents: defaultScheduleEvents,
+                        instrumentStatusData: defaultInstrumentStatusData,
+                        inventoryStockData: defaultInventoryStockData,
+                        monthlyUsageData: defaultMonthlyUsageData,
+                    })
+                } else {
+                    const data = await response.json()
+                    console.log('[Dashboard] Data received, events count:', data.scheduleEvents?.length)
+
+                    // Parse schedule events with proper date conversion
+                    const parsedEvents = data.scheduleEvents?.map((e: { id: string; title: string; date: string; type: string; location?: string; description?: string }) => ({
+                        ...e,
+                        date: new Date(e.date + 'T00:00:00'), // Ensure proper date parsing
+                    })) || defaultScheduleEvents
+
+                    console.log('[Dashboard] Parsed events:', parsedEvents)
+
+                    setDashboardData({
+                        ...data,
+                        scheduleEvents: parsedEvents.length > 0 ? parsedEvents : defaultScheduleEvents,
+                        instrumentStatusData: data.instrumentStatusData?.length ? data.instrumentStatusData : defaultInstrumentStatusData,
+                        inventoryStockData: data.inventoryStockData?.length ? data.inventoryStockData : defaultInventoryStockData,
+                        monthlyUsageData: data.monthlyUsageData?.length ? data.monthlyUsageData : defaultMonthlyUsageData,
+                    })
+                }
+            } catch (err) {
+                clearTimeout(timeoutId)
+                // Ignore AbortError from cleanup
+                if (err instanceof Error && err.name === 'AbortError') {
+                    console.log('[Dashboard] Fetch aborted')
+                    return
+                }
+                console.error('[Dashboard] Fetch error:', err)
                 setDashboardData({
                     stats: {
                         expiredReagents: 0,
@@ -130,40 +184,23 @@ export default function DashboardPage() {
                     inventoryStockData: defaultInventoryStockData,
                     monthlyUsageData: defaultMonthlyUsageData,
                 })
-            } else {
-                const data = await response.json()
-                setDashboardData({
-                    ...data,
-                    scheduleEvents: data.scheduleEvents?.length ? data.scheduleEvents.map((e: { id: string; title: string; date: string; type: string; location?: string; description?: string }) => ({
-                        ...e,
-                        date: new Date(e.date),
-                    })) : defaultScheduleEvents,
-                    instrumentStatusData: data.instrumentStatusData?.length ? data.instrumentStatusData : defaultInstrumentStatusData,
-                    inventoryStockData: data.inventoryStockData?.length ? data.inventoryStockData : defaultInventoryStockData,
-                    monthlyUsageData: data.monthlyUsageData?.length ? data.monthlyUsageData : defaultMonthlyUsageData,
-                })
+            } finally {
+                // Only set loading to false if not aborted
+                if (!controller.signal.aborted) {
+                    setIsLoading(false)
+                }
             }
-        } catch (err) {
-            console.error('Dashboard fetch error:', err)
-            // Use fallback data on error
-            setDashboardData({
-                stats: {
-                    expiredReagents: 0,
-                    lowStockItems: 0,
-                    outOfStockItems: 0,
-                    upcomingCalibrations: 0,
-                },
-                expiringReagents: [],
-                upcomingCalibrations: [],
-                scheduleEvents: defaultScheduleEvents,
-                instrumentStatusData: defaultInstrumentStatusData,
-                inventoryStockData: defaultInventoryStockData,
-                monthlyUsageData: defaultMonthlyUsageData,
-            })
-        } finally {
-            setIsLoading(false)
         }
-    }
+
+        fetchDashboardData()
+
+        // Cleanup function: abort the request when component unmounts
+        return () => {
+            console.log('[Dashboard] Cleanup: aborting fetch')
+            controller.abort()
+            clearTimeout(timeoutId)
+        }
+    }, [])
 
     const statsData = [
         {
@@ -214,7 +251,7 @@ export default function DashboardPage() {
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
                 <p className="text-muted-foreground">
-                    Selamat datang, <span className="font-medium">{user?.fullName || 'User'}</span> - LIMS Custom
+                    Selamat datang, <span className="font-medium">{user?.fullName || 'User'}</span> - LabFlow Assets
                 </p>
             </div>
 

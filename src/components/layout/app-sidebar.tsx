@@ -140,10 +140,8 @@ export function AppSidebar() {
         <Sidebar className="border-r border-sidebar-border">
             <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
                 <Link href="/" className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                        <FlaskConical className="h-4 w-4" />
-                    </div>
-                    <span className="text-lg font-semibold">LIMS Custom</span>
+                    <img src="/logo.png" alt="LabFlow Assets" className="h-8 w-8 object-contain" />
+                    <span className="text-lg font-semibold">LabFlow Assets</span>
                 </Link>
             </SidebarHeader>
 

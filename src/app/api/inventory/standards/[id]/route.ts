@@ -34,24 +34,30 @@ export async function PUT(
         const { id } = await params;
         const body = await request.json();
 
-        // Convert empty strings to null for optional numeric fields
-        const sizeValue = body.sizeValue === '' || body.sizeValue === null || body.sizeValue === undefined
-            ? null
-            : body.sizeValue;
+        console.log('Standard PUT request body:', JSON.stringify(body, null, 2));
 
-        const standard = await standardService.update(id, {
-            standardName: body.standardName,
-            casNumber: body.casNumber || null,
-            chemicalFormula: body.chemicalFormula || null,
-            supplier: body.supplier || null,
-            sizeValue: sizeValue,
-            sizeUnit: body.sizeUnit || null,
-            form: body.form,
-            storageLocation: body.storageLocation,
-            msdsDocument: body.msdsDocument || null,
-            photo: body.productPhoto || body.photo || null,
-            minimumStockLevel: body.minimumStockLevel ?? 0,
-        });
+        // Build update object only with values that are provided
+        const updateData: Record<string, unknown> = {};
+
+        if (body.standardName) updateData.standardName = body.standardName;
+        if (body.casNumber !== undefined) updateData.casNumber = body.casNumber || null;
+        if (body.chemicalFormula !== undefined) updateData.chemicalFormula = body.chemicalFormula || null;
+        if (body.supplier !== undefined) updateData.supplier = body.supplier || null;
+        if (body.sizeValue !== undefined && body.sizeValue !== '' && body.sizeValue !== null) {
+            updateData.sizeValue = body.sizeValue;
+        } else {
+            updateData.sizeValue = null;
+        }
+        if (body.sizeUnit !== undefined) updateData.sizeUnit = body.sizeUnit || null;
+        if (body.form) updateData.form = body.form;
+        if (body.storageLocation) updateData.storageLocation = body.storageLocation;
+        if (body.msdsDocument !== undefined) updateData.msdsDocument = body.msdsDocument || null;
+        if (body.photo !== undefined) updateData.photo = body.photo || null;
+        if (body.minimumStockLevel !== undefined) updateData.minimumStockLevel = parseInt(body.minimumStockLevel) || 0;
+
+        console.log('Standard update data:', JSON.stringify(updateData, null, 2));
+
+        const standard = await standardService.update(id, updateData);
 
         if (!standard) {
             return NextResponse.json(
@@ -64,7 +70,7 @@ export async function PUT(
     } catch (error) {
         console.error('Standard PUT error:', error);
         return NextResponse.json(
-            { error: 'Gagal mengupdate standard' },
+            { error: 'Gagal mengupdate standard: ' + (error instanceof Error ? error.message : 'Unknown error') },
             { status: 500 }
         );
     }

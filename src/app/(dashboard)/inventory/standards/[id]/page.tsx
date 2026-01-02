@@ -6,6 +6,8 @@ import { use } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ArrowLeft, Edit, Trash2, TestTubes, MapPin, Package, Calendar, Building, Beaker, Loader2 } from "lucide-react"
 import { StockStatus } from "@/types"
 import {
@@ -19,6 +21,22 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 interface StandardDetail {
     id: string
@@ -45,6 +63,10 @@ const statusConfig: Record<StockStatus, { label: string; variant: "default" | "s
     expired: { label: "Expired", variant: "destructive" },
 }
 
+const storageLocations = ["TC 1", "TC 2", "TC 3"]
+const forms = ["liquid", "solid", "gas"]
+const sizeUnits = ["mL", "L", "g", "kg", "mg", "unit"]
+
 export default function StandardDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter()
     const resolvedParams = use(params)
@@ -53,27 +75,55 @@ export default function StandardDetailPage({ params }: { params: Promise<{ id: s
     const [error, setError] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
-    useEffect(() => {
-        const fetchStandard = async () => {
-            try {
-                setIsLoading(true)
-                const response = await fetch(`/api/inventory/standards/${resolvedParams.id}`)
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        setError("Standard tidak ditemukan")
-                    } else {
-                        setError("Gagal mengambil data standard")
-                    }
-                    return
+    // Edit states
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [isEditing, setIsEditing] = useState(false)
+    const [editForm, setEditForm] = useState({
+        standardName: "",
+        casNumber: "",
+        chemicalFormula: "",
+        supplier: "",
+        sizeValue: "",
+        sizeUnit: "",
+        form: "",
+        storageLocation: "",
+        minimumStockLevel: 0,
+    })
+
+    const fetchStandard = async () => {
+        try {
+            setIsLoading(true)
+            const response = await fetch(`/api/inventory/standards/${resolvedParams.id}`)
+            if (!response.ok) {
+                if (response.status === 404) {
+                    setError("Standard tidak ditemukan")
+                } else {
+                    setError("Gagal mengambil data standard")
                 }
-                const data = await response.json()
-                setStandard(data.standard)
-            } catch (err) {
-                setError("Terjadi kesalahan saat mengambil data")
-            } finally {
-                setIsLoading(false)
+                return
             }
+            const data = await response.json()
+            setStandard(data.standard)
+            // Initialize edit form
+            setEditForm({
+                standardName: data.standard.standardName || "",
+                casNumber: data.standard.casNumber || "",
+                chemicalFormula: data.standard.chemicalFormula || "",
+                supplier: data.standard.supplier || "",
+                sizeValue: data.standard.sizeValue?.toString() || "",
+                sizeUnit: data.standard.sizeUnit || "",
+                form: data.standard.form || "",
+                storageLocation: data.standard.storageLocation || "",
+                minimumStockLevel: data.standard.minimumStockLevel || 0,
+            })
+        } catch (err) {
+            setError("Terjadi kesalahan saat mengambil data")
+        } finally {
+            setIsLoading(false)
         }
+    }
+
+    useEffect(() => {
         fetchStandard()
     }, [resolvedParams.id])
 
@@ -92,6 +142,31 @@ export default function StandardDetailPage({ params }: { params: Promise<{ id: s
             setError("Terjadi kesalahan saat menghapus")
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    const handleEdit = async () => {
+        try {
+            setIsEditing(true)
+            const payload = {
+                ...editForm,
+                sizeValue: editForm.sizeValue ? parseFloat(editForm.sizeValue) : null,
+            }
+            const response = await fetch(`/api/inventory/standards/${resolvedParams.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            })
+            if (response.ok) {
+                setIsEditDialogOpen(false)
+                fetchStandard() // Refresh data
+            } else {
+                setError("Gagal mengupdate standard")
+            }
+        } catch (err) {
+            setError("Terjadi kesalahan saat mengupdate")
+        } finally {
+            setIsEditing(false)
         }
     }
 
@@ -135,10 +210,135 @@ export default function StandardDetailPage({ params }: { params: Promise<{ id: s
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                    </Button>
+                    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                                <DialogTitle>Edit Standard</DialogTitle>
+                                <DialogDescription>
+                                    Ubah informasi standard di bawah ini.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="standardName">Nama Standard *</Label>
+                                    <Input
+                                        id="standardName"
+                                        value={editForm.standardName}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, standardName: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="casNumber">CAS Number</Label>
+                                        <Input
+                                            id="casNumber"
+                                            value={editForm.casNumber}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, casNumber: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="chemicalFormula">Rumus Kimia</Label>
+                                        <Input
+                                            id="chemicalFormula"
+                                            value={editForm.chemicalFormula}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, chemicalFormula: e.target.value }))}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="supplier">Supplier</Label>
+                                    <Input
+                                        id="supplier"
+                                        value={editForm.supplier}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, supplier: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="sizeValue">Ukuran</Label>
+                                        <Input
+                                            id="sizeValue"
+                                            type="number"
+                                            value={editForm.sizeValue}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, sizeValue: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="sizeUnit">Satuan</Label>
+                                        <Select
+                                            value={editForm.sizeUnit}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, sizeUnit: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih satuan" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {sizeUnits.map((unit) => (
+                                                    <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="storageLocation">Lokasi Penyimpanan</Label>
+                                        <Select
+                                            value={editForm.storageLocation}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, storageLocation: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih lokasi" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {storageLocations.map((loc) => (
+                                                    <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="form">Bentuk</Label>
+                                        <Select
+                                            value={editForm.form}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, form: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih bentuk" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {forms.map((f) => (
+                                                    <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="minimumStockLevel">Minimum Stok Level</Label>
+                                    <Input
+                                        id="minimumStockLevel"
+                                        type="number"
+                                        value={editForm.minimumStockLevel}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, minimumStockLevel: parseInt(e.target.value) || 0 }))}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Batal</Button>
+                                <Button onClick={handleEdit} disabled={isEditing || !editForm.standardName}>
+                                    {isEditing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Simpan
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button variant="destructive" disabled={isDeleting}>
@@ -154,7 +354,7 @@ export default function StandardDetailPage({ params }: { params: Promise<{ id: s
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Hapus Standard?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Tindakan ini tidak dapat dibatalkan. Standard "{standard.standardName}" akan dihapus secara permanen.
+                                    Tindakan ini tidak dapat dibatalkan. Standard &quot;{standard.standardName}&quot; akan dihapus secara permanen.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

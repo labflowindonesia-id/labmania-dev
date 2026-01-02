@@ -6,6 +6,8 @@ import { use } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ArrowLeft, Edit, Trash2, FlaskConical, MapPin, Package, Calendar, Building, Loader2 } from "lucide-react"
 import { StockStatus } from "@/types"
 import {
@@ -19,6 +21,22 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     Table,
     TableBody,
@@ -61,6 +79,9 @@ const statusConfig: Record<StockStatus, { label: string; variant: "default" | "s
     expired: { label: "Expired", variant: "destructive" },
 }
 
+const storageLocations = ["TC 1", "TC 2", "TC 3"]
+const forms = ["liquid", "solid", "gas"]
+
 export default function ReagentDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter()
     const resolvedParams = use(params)
@@ -70,28 +91,50 @@ export default function ReagentDetailPage({ params }: { params: Promise<{ id: st
     const [error, setError] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
-    useEffect(() => {
-        const fetchReagent = async () => {
-            try {
-                setIsLoading(true)
-                const response = await fetch(`/api/inventory/reagents/${resolvedParams.id}`)
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        setError("Reagen tidak ditemukan")
-                    } else {
-                        setError("Gagal mengambil data reagen")
-                    }
-                    return
+    // Edit states
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [isEditing, setIsEditing] = useState(false)
+    const [editForm, setEditForm] = useState({
+        reagentName: "",
+        casNumber: "",
+        supplier: "",
+        storageLocation: "",
+        form: "",
+        minimumStockLevel: 0,
+    })
+
+    const fetchReagent = async () => {
+        try {
+            setIsLoading(true)
+            const response = await fetch(`/api/inventory/reagents/${resolvedParams.id}`)
+            if (!response.ok) {
+                if (response.status === 404) {
+                    setError("Reagen tidak ditemukan")
+                } else {
+                    setError("Gagal mengambil data reagen")
                 }
-                const data = await response.json()
-                setReagent(data.reagent)
-                setWarehouseRecords(data.warehouseRecords || [])
-            } catch (err) {
-                setError("Terjadi kesalahan saat mengambil data")
-            } finally {
-                setIsLoading(false)
+                return
             }
+            const data = await response.json()
+            setReagent(data.reagent)
+            setWarehouseRecords(data.warehouseRecords || [])
+            // Initialize edit form
+            setEditForm({
+                reagentName: data.reagent.reagentName || "",
+                casNumber: data.reagent.casNumber || "",
+                supplier: data.reagent.supplier || "",
+                storageLocation: data.reagent.storageLocation || "",
+                form: data.reagent.form || "",
+                minimumStockLevel: data.reagent.minimumStockLevel || 0,
+            })
+        } catch (err) {
+            setError("Terjadi kesalahan saat mengambil data")
+        } finally {
+            setIsLoading(false)
         }
+    }
+
+    useEffect(() => {
         fetchReagent()
     }, [resolvedParams.id])
 
@@ -110,6 +153,27 @@ export default function ReagentDetailPage({ params }: { params: Promise<{ id: st
             setError("Terjadi kesalahan saat menghapus")
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    const handleEdit = async () => {
+        try {
+            setIsEditing(true)
+            const response = await fetch(`/api/inventory/reagents/${resolvedParams.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editForm),
+            })
+            if (response.ok) {
+                setIsEditDialogOpen(false)
+                fetchReagent() // Refresh data
+            } else {
+                setError("Gagal mengupdate reagen")
+            }
+        } catch (err) {
+            setError("Terjadi kesalahan saat mengupdate")
+        } finally {
+            setIsEditing(false)
         }
     }
 
@@ -150,10 +214,100 @@ export default function ReagentDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                    </Button>
+                    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                                <DialogTitle>Edit Reagen</DialogTitle>
+                                <DialogDescription>
+                                    Ubah informasi reagen di bawah ini.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="reagentName">Nama Reagen *</Label>
+                                    <Input
+                                        id="reagentName"
+                                        value={editForm.reagentName}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, reagentName: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="casNumber">CAS Number</Label>
+                                        <Input
+                                            id="casNumber"
+                                            value={editForm.casNumber}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, casNumber: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="supplier">Supplier</Label>
+                                        <Input
+                                            id="supplier"
+                                            value={editForm.supplier}
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, supplier: e.target.value }))}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="storageLocation">Lokasi Penyimpanan</Label>
+                                        <Select
+                                            value={editForm.storageLocation}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, storageLocation: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih lokasi" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {storageLocations.map((loc) => (
+                                                    <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="form">Bentuk</Label>
+                                        <Select
+                                            value={editForm.form}
+                                            onValueChange={(value) => setEditForm(prev => ({ ...prev, form: value }))}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih bentuk" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {forms.map((f) => (
+                                                    <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="minimumStockLevel">Minimum Stok Level</Label>
+                                    <Input
+                                        id="minimumStockLevel"
+                                        type="number"
+                                        value={editForm.minimumStockLevel}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, minimumStockLevel: parseInt(e.target.value) || 0 }))}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Batal</Button>
+                                <Button onClick={handleEdit} disabled={isEditing || !editForm.reagentName}>
+                                    {isEditing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Simpan
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button variant="destructive" disabled={isDeleting}>

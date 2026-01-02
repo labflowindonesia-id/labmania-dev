@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LIMS Custom - Manajemen Laboratorium",
+  title: "LabFlow Assets - Manajemen Laboratorium",
   description: "Sistem informasi manajemen laboratorium untuk inventory, instrumen, dan kalibrasi",
 };
 

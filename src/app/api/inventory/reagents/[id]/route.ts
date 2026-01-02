@@ -37,16 +37,23 @@ export async function PUT(
         const { id } = await params;
         const body = await request.json();
 
-        const reagent = await reagentService.update(id, {
-            reagentName: body.reagentName,
-            casNumber: body.casNumber,
-            supplier: body.supplier,
-            storageLocation: body.storageLocation,
-            form: body.form,
-            msdsDocument: body.msdsDocument,
-            productPhoto: body.productPhoto,
-            minimumStockLevel: body.minimumStockLevel,
-        });
+        console.log('Reagent PUT request body:', JSON.stringify(body, null, 2));
+
+        // Build update object only with values that are provided
+        const updateData: Record<string, unknown> = {};
+
+        if (body.reagentName) updateData.reagentName = body.reagentName;
+        if (body.casNumber !== undefined) updateData.casNumber = body.casNumber || null;
+        if (body.supplier !== undefined) updateData.supplier = body.supplier || null;
+        if (body.storageLocation) updateData.storageLocation = body.storageLocation;
+        if (body.form) updateData.form = body.form;
+        if (body.msdsDocument !== undefined) updateData.msdsDocument = body.msdsDocument || null;
+        if (body.productPhoto !== undefined) updateData.productPhoto = body.productPhoto || null;
+        if (body.minimumStockLevel !== undefined) updateData.minimumStockLevel = parseInt(body.minimumStockLevel) || 0;
+
+        console.log('Reagent update data:', JSON.stringify(updateData, null, 2));
+
+        const reagent = await reagentService.update(id, updateData);
 
         if (!reagent) {
             return NextResponse.json(
@@ -59,7 +66,7 @@ export async function PUT(
     } catch (error) {
         console.error('Reagent PUT error:', error);
         return NextResponse.json(
-            { error: 'Gagal mengupdate reagen' },
+            { error: 'Gagal mengupdate reagen: ' + (error instanceof Error ? error.message : 'Unknown error') },
             { status: 500 }
         );
     }

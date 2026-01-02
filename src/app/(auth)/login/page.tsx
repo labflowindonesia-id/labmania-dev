@@ -11,7 +11,18 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { FlaskConical, Loader2, User, Lock, Eye, EyeOff, AlertCircle } from "lucide-react"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Loader2, User, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react"
 import { useAuth } from "@/components/providers/auth-provider"
 
 export default function LoginPage() {
@@ -23,6 +34,17 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Contact Support States
+    const [isContactOpen, setIsContactOpen] = useState(false)
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submitSuccess, setSubmitSuccess] = useState(false)
+    const [contactForm, setContactForm] = useState({
+        name: "",
+        company: "",
+        contact: "",
+        issue: "",
+    })
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -39,21 +61,116 @@ export default function LoginPage() {
         }
     }
 
+    const handleContactSubmit = async () => {
+        if (!contactForm.name || !contactForm.company || !contactForm.contact || !contactForm.issue) {
+            return
+        }
+        setIsSubmitting(true)
+        try {
+            const response = await fetch("/api/support", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(contactForm),
+            })
+            if (response.ok) {
+                setSubmitSuccess(true)
+                setContactForm({ name: "", company: "", contact: "", issue: "" })
+                setTimeout(() => {
+                    setIsContactOpen(false)
+                    setSubmitSuccess(false)
+                }, 2000)
+            }
+        } catch (error) {
+            console.error("Contact support error:", error)
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     return (
         <div className="min-h-screen flex flex-col bg-[#f5f7f8] dark:bg-[#101922]">
             {/* Header */}
             <header className="flex items-center justify-between px-8 py-4 w-full absolute top-0 z-10">
                 <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 text-primary">
-                        <FlaskConical className="h-8 w-8" />
-                    </div>
+                    <img src="/logo.png" alt="LabFlow" className="h-8 w-8 object-contain" />
                     <h2 className="text-xl font-bold leading-tight tracking-tight text-foreground">
                         LabFlow
                     </h2>
                 </div>
-                <Button variant="outline" className="h-9 px-4">
-                    Contact Support
-                </Button>
+                <Dialog open={isContactOpen} onOpenChange={setIsContactOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline" className="h-9 px-4">
+                            Contact Support
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Hubungi Support</DialogTitle>
+                            <DialogDescription>
+                                Isi formulir di bawah untuk menghubungi tim support kami.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {submitSuccess ? (
+                            <div className="py-8 text-center">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <p className="font-medium text-green-600">Permintaan berhasil dikirim!</p>
+                                <p className="text-sm text-muted-foreground mt-2">Tim kami akan menghubungi Anda segera.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="name">Nama *</Label>
+                                        <Input
+                                            id="name"
+                                            placeholder="Masukkan nama Anda"
+                                            value={contactForm.name}
+                                            onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="company">Perusahaan *</Label>
+                                        <Input
+                                            id="company"
+                                            placeholder="Nama perusahaan Anda"
+                                            value={contactForm.company}
+                                            onChange={(e) => setContactForm(prev => ({ ...prev, company: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="contact">Kontak/Email *</Label>
+                                        <Input
+                                            id="contact"
+                                            placeholder="Email atau nomor telepon"
+                                            value={contactForm.contact}
+                                            onChange={(e) => setContactForm(prev => ({ ...prev, contact: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="issue">Masalah *</Label>
+                                        <Textarea
+                                            id="issue"
+                                            placeholder="Jelaskan masalah atau pertanyaan Anda"
+                                            value={contactForm.issue}
+                                            onChange={(e) => setContactForm(prev => ({ ...prev, issue: e.target.value }))}
+                                            rows={4}
+                                        />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button
+                                        type="submit"
+                                        onClick={handleContactSubmit}
+                                        disabled={isSubmitting || !contactForm.name || !contactForm.company || !contactForm.contact || !contactForm.issue}
+                                    >
+                                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Kirim
+                                    </Button>
+                                </DialogFooter>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </header>
 
             {/* Main Content */}
@@ -63,9 +180,7 @@ export default function LoginPage() {
                     <div className="w-full max-w-[480px] flex flex-col gap-6">
                         {/* Mobile Logo */}
                         <div className="lg:hidden flex justify-center mb-6">
-                            <div className="h-16 w-16 text-primary">
-                                <FlaskConical className="h-16 w-16" />
-                            </div>
+                            <img src="/logo.png" alt="LabFlow" className="h-16 w-16 object-contain" />
                         </div>
 
                         {/* Welcome Text */}
@@ -113,12 +228,7 @@ export default function LoginPage() {
 
                             {/* Password */}
                             <div className="flex flex-col gap-2">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-base font-medium">Password</label>
-                                    <a href="#" className="text-primary hover:text-primary/80 text-sm font-bold transition-colors">
-                                        Forgot Password?
-                                    </a>
-                                </div>
+                                <label className="text-base font-medium">Password</label>
                                 <div className="relative">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                     <Input
@@ -169,7 +279,7 @@ export default function LoginPage() {
                         </form>
 
                         <p className="text-center text-muted-foreground text-sm mt-4">
-                            Powered by Labmania Indonesia
+                            Powered by LabFlow Indonesia
                         </p>
                     </div>
                 </div>
@@ -196,9 +306,6 @@ export default function LoginPage() {
 
                     {/* Floating Card Content */}
                     <div className="relative z-10 max-w-md text-white p-8">
-                        <div className="mb-6 inline-flex items-center justify-center p-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
-                            <FlaskConical className="h-10 w-10 text-white" />
-                        </div>
                         <h2 className="text-4xl font-bold mb-4 tracking-tight leading-snug">
                             Efficient Lab Management for Modern Science
                         </h2>

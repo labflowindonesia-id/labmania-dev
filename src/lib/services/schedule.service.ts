@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db';
-import { eq, desc, and, or, gte, lte } from 'drizzle-orm';
+import { eq, desc, and, gte, lte } from 'drizzle-orm';
 import type { ScheduleEvent, NewScheduleEvent } from '@/lib/db/schema/instruments';
 
 class ScheduleService {
@@ -67,17 +67,70 @@ class ScheduleService {
 
     /**
      * Generate calendar events from instruments and inventory
-     * This aggregates data from various sources for the dashboard calendar
+     * OPTIMIZED: Filters to ±6 months and uses parallel queries
      */
     async generateCalendarEvents(): Promise<ScheduleEvent[]> {
+        // Calculate date range: ±6 months from today
+        const today = new Date();
+        const sixMonthsAgo = new Date(today);
+        sixMonthsAgo.setMonth(today.getMonth() - 6);
+        const sixMonthsFromNow = new Date(today);
+        sixMonthsFromNow.setMonth(today.getMonth() + 6);
+
+        const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
+        const endDateStr = sixMonthsFromNow.toISOString().split('T')[0];
+
+        // Run all queries in parallel for better performance
+        const [dbEvents, instruments, expiringChemicals, maintenanceLogs, ordersList] = await Promise.all([
+            // 1. Schedule events within date range
+            db.query.scheduleEvents.findMany({
+                where: and(
+                    gte(schema.scheduleEvents.date, startDateStr),
+                    lte(schema.scheduleEvents.date, endDateStr)
+                ),
+                orderBy: schema.scheduleEvents.date,
+            }),
+
+            // 2. Instruments with calibration within range
+            db.query.instruments.findMany({
+                where: and(
+                    gte(schema.instruments.nextCalibrationDate, startDateStr),
+                    lte(schema.instruments.nextCalibrationDate, endDateStr)
+                ),
+            }),
+
+            // 3. Chemicals expiring within range
+            db.query.warehouseChemicals.findMany({
+                where: and(
+                    gte(schema.warehouseChemicals.expiredDate, startDateStr),
+                    lte(schema.warehouseChemicals.expiredDate, endDateStr)
+                ),
+            }),
+
+            // 4. Maintenance logs within range  
+            db.query.maintenanceLogs.findMany({
+                where: and(
+                    gte(schema.maintenanceLogs.maintenanceDate, startDateStr),
+                    lte(schema.maintenanceLogs.maintenanceDate, endDateStr)
+                ),
+                with: { instrument: true },
+            }),
+
+            // 5. Orders within range
+            db.query.orders.findMany({
+                where: and(
+                    gte(schema.orders.orderDate, startDateStr),
+                    lte(schema.orders.orderDate, endDateStr)
+                ),
+            }),
+        ]);
+
         const events: ScheduleEvent[] = [];
 
-        // Get scheduled events from database
-        const dbEvents = await this.getAll();
+        // Add database events
         events.push(...dbEvents);
 
-        // Get upcoming calibrations from instruments
-        const instruments = await db.query.instruments.findMany();
+        // Add calibration events from instruments
         for (const inst of instruments) {
             if (inst.nextCalibrationDate) {
                 events.push({
@@ -94,14 +147,7 @@ class ScheduleService {
             }
         }
 
-        // Get expiring chemicals (next 30 days)
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-
-        const expiringChemicals = await db.query.warehouseChemicals.findMany({
-            where: lte(schema.warehouseChemicals.expiredDate, thirtyDaysFromNow.toISOString().split('T')[0]),
-        });
-
+        // Add expiring chemical events
         for (const chem of expiringChemicals) {
             events.push({
                 id: `exp-${chem.id}`,
@@ -116,11 +162,7 @@ class ScheduleService {
             });
         }
 
-        // Get maintenance logs
-        const maintenanceLogs = await db.query.maintenanceLogs.findMany({
-            with: { instrument: true }
-        });
-
+        // Add maintenance events
         for (const log of maintenanceLogs) {
             events.push({
                 id: `maint-${log.id}`,
@@ -135,9 +177,7 @@ class ScheduleService {
             });
         }
 
-        // Get orders
-        const ordersList = await db.query.orders.findMany();
-
+        // Add order events
         for (const order of ordersList) {
             events.push({
                 id: `order-${order.id}`,
@@ -152,7 +192,11 @@ class ScheduleService {
             });
         }
 
-        return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // Sort by date and limit to prevent UI overload
+        const sortedEvents = events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        // Limit to 200 events max to prevent UI performance issues
+        return sortedEvents.slice(0, 200);
     }
 }
 
