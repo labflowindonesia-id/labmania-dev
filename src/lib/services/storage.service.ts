@@ -6,6 +6,7 @@ export const STORAGE_BUCKETS = {
     DOCUMENTS: 'documents',                     // MSDS, general documents
     CALIBRATION_REPORTS: 'calibration-reports', // Calibration job reports (PDF only)
     MAINTENANCE_PHOTOS: 'maintenance-photos',   // Maintenance log photos
+    BACKUPS: 'backups',                         // Database backups (ZIP files)
 } as const;
 
 export type StorageBucket = typeof STORAGE_BUCKETS[keyof typeof STORAGE_BUCKETS];
@@ -39,6 +40,11 @@ export const BUCKET_CONFIG: Record<StorageBucket, {
         maxSize: 5 * 1024 * 1024,  // 5MB
         allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
         description: 'JPG, PNG, WEBP'
+    },
+    'backups': {
+        maxSize: 100 * 1024 * 1024, // 100MB
+        allowedTypes: ['application/zip', 'application/x-zip-compressed'],
+        description: 'ZIP'
     }
 };
 
@@ -178,6 +184,72 @@ export const StorageService = {
             };
         } catch (error) {
             console.error('Upload file error:', error);
+            return {
+                success: false,
+                error: 'Terjadi kesalahan saat mengunggah file',
+            };
+        }
+    },
+
+    /**
+     * Upload a buffer directly to Supabase Storage (useful for generated files)
+     * @param bucket - Target storage bucket
+     * @param filePath - Full path within bucket (e.g., 'monthly/backup_2024-01-01.zip')
+     * @param buffer - Buffer to upload
+     * @param contentType - MIME type of the file
+     */
+    async uploadBuffer(
+        bucket: StorageBucket,
+        filePath: string,
+        buffer: Buffer,
+        contentType: string
+    ): Promise<UploadResult> {
+        try {
+            // Validate bucket exists in config
+            if (!BUCKET_CONFIG[bucket]) {
+                return {
+                    success: false,
+                    error: `Bucket tidak valid: ${bucket}`,
+                };
+            }
+
+            // Validate file size
+            if (!isValidFileSize(buffer.length, bucket)) {
+                return {
+                    success: false,
+                    error: `Ukuran file terlalu besar. Maksimal: ${getMaxSizeDisplay(bucket)}`,
+                };
+            }
+
+            const supabase = await createClient();
+
+            const { data, error } = await supabase.storage
+                .from(bucket)
+                .upload(filePath, buffer, {
+                    contentType,
+                    upsert: true, // Allow overwrite for backups
+                });
+
+            if (error) {
+                console.error('Storage upload buffer error:', error);
+                return {
+                    success: false,
+                    error: error.message,
+                };
+            }
+
+            // Get public URL
+            const { data: urlData } = supabase.storage
+                .from(bucket)
+                .getPublicUrl(data.path);
+
+            return {
+                success: true,
+                path: data.path,
+                publicUrl: urlData.publicUrl,
+            };
+        } catch (error) {
+            console.error('Upload buffer error:', error);
             return {
                 success: false,
                 error: 'Terjadi kesalahan saat mengunggah file',

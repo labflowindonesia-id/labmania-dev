@@ -12,5 +12,7 @@ export { trainingService } from './training.service';
 export { usageLogService } from './usage-log.service';
 export { warehouseChemicalService } from './warehouse-chemical.service';
 export { warehouseItemService } from './warehouse-item.service';
+export { backupService } from './backup.service';
 export { StorageService, STORAGE_BUCKETS, BUCKET_CONFIG } from './storage.service';
 export type { StorageBucket } from './storage.service';
+

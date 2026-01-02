@@ -1,15 +1,31 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import useSWR from "swr"
+import dynamic from "next/dynamic"
 import { addDays } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, Package, Clock, Wrench, TrendingUp, Loader2 } from "lucide-react"
+import { AlertTriangle, Package, Clock, Wrench, TrendingUp } from "lucide-react"
 import { WeeklyCalendar } from "@/components/dashboard/weekly-calendar"
 import { MonthlyCalendar, type ScheduleEvent } from "@/components/dashboard/monthly-calendar"
-import { InstrumentStatusChart, InventoryStockChart, MonthlyUsageChart } from "@/components/dashboard/charts"
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton"
 import { useAuth } from "@/components/providers/auth-provider"
+
+// Lazy load chart components to reduce initial bundle size
+const InstrumentStatusChart = dynamic(
+    () => import("@/components/dashboard/charts").then(mod => ({ default: mod.InstrumentStatusChart })),
+    { ssr: false, loading: () => <div className="h-[250px] animate-pulse bg-muted rounded-lg" /> }
+)
+const InventoryStockChart = dynamic(
+    () => import("@/components/dashboard/charts").then(mod => ({ default: mod.InventoryStockChart })),
+    { ssr: false, loading: () => <div className="h-[250px] animate-pulse bg-muted rounded-lg" /> }
+)
+const MonthlyUsageChart = dynamic(
+    () => import("@/components/dashboard/charts").then(mod => ({ default: mod.MonthlyUsageChart })),
+    { ssr: false, loading: () => <div className="h-[250px] animate-pulse bg-muted rounded-lg" /> }
+)
 
 // Chart data types
 interface InstrumentStatusDataItem {
@@ -101,106 +117,79 @@ const defaultMonthlyUsageData = [
     { month: "Des", reagen: 0, consumable: 0 },
 ]
 
+// Default dashboard data for fallback
+const defaultDashboardData: DashboardData = {
+    stats: {
+        expiredReagents: 0,
+        lowStockItems: 0,
+        outOfStockItems: 0,
+        upcomingCalibrations: 0,
+    },
+    expiringReagents: [],
+    upcomingCalibrations: [],
+    scheduleEvents: defaultScheduleEvents,
+    instrumentStatusData: defaultInstrumentStatusData,
+    inventoryStockData: defaultInventoryStockData,
+    monthlyUsageData: defaultMonthlyUsageData,
+}
+
+// SWR fetcher with proper data parsing
+const dashboardFetcher = async (url: string): Promise<DashboardData> => {
+    console.log('[Dashboard] SWR fetching data...')
+    const startTime = Date.now()
+
+    const response = await fetch(url)
+
+    if (!response.ok) {
+        console.log('[Dashboard] Response not ok, using fallback')
+        return defaultDashboardData
+    }
+
+    const data = await response.json()
+    console.log(`[Dashboard] Data received in ${Date.now() - startTime}ms, events count:`, data.scheduleEvents?.length)
+
+    // Parse schedule events with proper date conversion
+    const parsedEvents = data.scheduleEvents?.map((e: { id: string; title: string; date: string; type: string; location?: string; description?: string }) => ({
+        ...e,
+        date: new Date(e.date + 'T00:00:00'), // Ensure proper date parsing
+    })) || defaultScheduleEvents
+
+    return {
+        ...data,
+        scheduleEvents: parsedEvents.length > 0 ? parsedEvents : defaultScheduleEvents,
+        instrumentStatusData: data.instrumentStatusData?.length ? data.instrumentStatusData : defaultInstrumentStatusData,
+        inventoryStockData: data.inventoryStockData?.length ? data.inventoryStockData : defaultInventoryStockData,
+        monthlyUsageData: data.monthlyUsageData?.length ? data.monthlyUsageData : defaultMonthlyUsageData,
+    }
+}
+
 export default function DashboardPage() {
-    const { user } = useAuth()
-    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    const { user, isLoading: authLoading } = useAuth()
 
-    useEffect(() => {
-        // Create AbortController to handle cleanup and prevent race conditions
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-        const fetchDashboardData = async () => {
-            console.log('[Dashboard] Starting fetch...')
-            try {
-                const response = await fetch("/api/dashboard", {
-                    signal: controller.signal
-                })
-                clearTimeout(timeoutId)
-
-                // Check if the request was aborted (component unmounted)
-                if (controller.signal.aborted) {
-                    console.log('[Dashboard] Fetch aborted (cleanup)')
-                    return
-                }
-
-                if (!response.ok) {
-                    console.log('[Dashboard] Response not ok, using fallback')
-                    setDashboardData({
-                        stats: {
-                            expiredReagents: 0,
-                            lowStockItems: 0,
-                            outOfStockItems: 0,
-                            upcomingCalibrations: 0,
-                        },
-                        expiringReagents: [],
-                        upcomingCalibrations: [],
-                        scheduleEvents: defaultScheduleEvents,
-                        instrumentStatusData: defaultInstrumentStatusData,
-                        inventoryStockData: defaultInventoryStockData,
-                        monthlyUsageData: defaultMonthlyUsageData,
-                    })
-                } else {
-                    const data = await response.json()
-                    console.log('[Dashboard] Data received, events count:', data.scheduleEvents?.length)
-
-                    // Parse schedule events with proper date conversion
-                    const parsedEvents = data.scheduleEvents?.map((e: { id: string; title: string; date: string; type: string; location?: string; description?: string }) => ({
-                        ...e,
-                        date: new Date(e.date + 'T00:00:00'), // Ensure proper date parsing
-                    })) || defaultScheduleEvents
-
-                    console.log('[Dashboard] Parsed events:', parsedEvents)
-
-                    setDashboardData({
-                        ...data,
-                        scheduleEvents: parsedEvents.length > 0 ? parsedEvents : defaultScheduleEvents,
-                        instrumentStatusData: data.instrumentStatusData?.length ? data.instrumentStatusData : defaultInstrumentStatusData,
-                        inventoryStockData: data.inventoryStockData?.length ? data.inventoryStockData : defaultInventoryStockData,
-                        monthlyUsageData: data.monthlyUsageData?.length ? data.monthlyUsageData : defaultMonthlyUsageData,
-                    })
-                }
-            } catch (err) {
-                clearTimeout(timeoutId)
-                // Ignore AbortError from cleanup
-                if (err instanceof Error && err.name === 'AbortError') {
-                    console.log('[Dashboard] Fetch aborted')
-                    return
-                }
-                console.error('[Dashboard] Fetch error:', err)
-                setDashboardData({
-                    stats: {
-                        expiredReagents: 0,
-                        lowStockItems: 0,
-                        outOfStockItems: 0,
-                        upcomingCalibrations: 0,
-                    },
-                    expiringReagents: [],
-                    upcomingCalibrations: [],
-                    scheduleEvents: defaultScheduleEvents,
-                    instrumentStatusData: defaultInstrumentStatusData,
-                    inventoryStockData: defaultInventoryStockData,
-                    monthlyUsageData: defaultMonthlyUsageData,
-                })
-            } finally {
-                // Only set loading to false if not aborted
-                if (!controller.signal.aborted) {
-                    setIsLoading(false)
-                }
-            }
+    // Use SWR for data fetching with caching and deduplication
+    const { data: dashboardData, isLoading: dataLoading, error } = useSWR<DashboardData>(
+        // Only fetch if user is authenticated
+        user ? "/api/dashboard" : null,
+        dashboardFetcher,
+        {
+            // Cache data for 60 seconds
+            dedupingInterval: 60000,
+            // Don't refetch on focus (reduce unnecessary requests)
+            revalidateOnFocus: false,
+            // Don't refetch on reconnect
+            revalidateOnReconnect: false,
+            // Use fallback data while loading
+            fallbackData: defaultDashboardData,
+            // Error retry config
+            errorRetryCount: 2,
+            errorRetryInterval: 1000,
+            // Keep previous data while revalidating
+            keepPreviousData: true,
         }
+    )
 
-        fetchDashboardData()
-
-        // Cleanup function: abort the request when component unmounts
-        return () => {
-            console.log('[Dashboard] Cleanup: aborting fetch')
-            controller.abort()
-            clearTimeout(timeoutId)
-        }
-    }, [])
+    // Show loading skeleton only during initial auth check
+    const isLoading = authLoading || (dataLoading && !dashboardData)
 
     const statsData = [
         {
@@ -238,11 +227,7 @@ export default function DashboardPage() {
     ]
 
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        )
+        return <DashboardSkeleton />
     }
 
     return (

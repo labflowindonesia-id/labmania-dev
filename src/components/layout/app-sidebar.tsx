@@ -251,6 +251,25 @@ export function AppSidebar() {
                         </SidebarGroupContent>
                     </SidebarGroup>
                 )}
+
+                {/* Backup Section - Visible for admin and manager roles */}
+                {(user?.role === 'admin' || user?.role === 'manager') && (
+                    <SidebarGroup>
+                        <SidebarGroupLabel>DATA</SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={isActive("/admin/backup")}>
+                                        <Link href="/admin/backup">
+                                            <Settings />
+                                            <span>Backup Data</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                )}
             </SidebarContent>
 
             <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">

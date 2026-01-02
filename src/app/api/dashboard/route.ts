@@ -31,9 +31,19 @@ const defaultChartData = {
     ],
 };
 
+// Safe query wrapper - returns default value on error instead of failing entire batch
+async function safeQuery<T>(queryFn: () => Promise<T>, defaultValue: T, queryName: string): Promise<T> {
+    try {
+        return await queryFn();
+    } catch (error) {
+        console.warn(`[Dashboard API] Query "${queryName}" failed:`, error instanceof Error ? error.message : error);
+        return defaultValue;
+    }
+}
+
 export async function GET() {
     const startTime = Date.now();
-    console.log('[Dashboard API] Starting...');
+    console.log('[Dashboard API] Starting optimized parallel fetch...');
 
     try {
         const today = new Date();
@@ -45,29 +55,36 @@ export async function GET() {
         fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
         const fourMonthsAgoStr = fourMonthsAgo.toISOString().split('T')[0];
 
-        // ========== SIMPLIFIED: Execute critical queries only ==========
-        console.log('[Dashboard API] Starting queries...');
+        // Calculate date range for schedule events: ±6 months from today
+        const sixMonthsAgo = new Date(today);
+        sixMonthsAgo.setMonth(today.getMonth() - 6);
+        const sixMonthsFromNow = new Date(today);
+        sixMonthsFromNow.setMonth(today.getMonth() + 6);
+        const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
+        const endDateStr = sixMonthsFromNow.toISOString().split('T')[0];
 
-        // 1. Stats queries (fast)
-        const [expiringChemicals, upcomingCalibrations] = await Promise.all([
-            db.select({ count: sql<number>`count(*)` })
+        // ========== BATCH 1: Critical stats and lists (smaller queries) ==========
+        const [
+            expiringChemicals,
+            upcomingCalibrations,
+            expiringReagentsList,
+            upcomingCalibrationsList,
+            instrumentsByStatus,
+            usageLogs,
+        ] = await Promise.all([
+            safeQuery(() => db.select({ count: sql<number>`count(*)` })
                 .from(schema.warehouseChemicals)
                 .where(and(
                     lte(schema.warehouseChemicals.expiredDate, thirtyDaysStr),
                     gte(schema.warehouseChemicals.expiredDate, todayStr)
-                )),
-            db.select({ count: sql<number>`count(*)` })
+                )), [{ count: 0 }], 'expiringChemicals'),
+            safeQuery(() => db.select({ count: sql<number>`count(*)` })
                 .from(schema.instruments)
                 .where(and(
                     lte(schema.instruments.nextCalibrationDate, thirtyDaysStr),
                     gte(schema.instruments.nextCalibrationDate, todayStr)
-                )),
-        ]);
-        console.log(`[Dashboard API] Stats queries done: ${Date.now() - startTime}ms`);
-
-        // 2. List queries for cards (fast)
-        const [expiringReagentsList, upcomingCalibrationsList] = await Promise.all([
-            db.select({
+                )), [{ count: 0 }], 'upcomingCalibrations'),
+            safeQuery(() => db.select({
                 id: schema.warehouseChemicals.id,
                 name: schema.warehouseChemicals.name,
                 expiredDate: schema.warehouseChemicals.expiredDate,
@@ -77,9 +94,8 @@ export async function GET() {
                     lte(schema.warehouseChemicals.expiredDate, thirtyDaysStr),
                     gte(schema.warehouseChemicals.expiredDate, todayStr)
                 ))
-                .limit(5),
-
-            db.select({
+                .limit(5), [], 'expiringReagentsList'),
+            safeQuery(() => db.select({
                 id: schema.instruments.id,
                 name: schema.instruments.name,
                 nextCalibrationDate: schema.instruments.nextCalibrationDate,
@@ -87,59 +103,101 @@ export async function GET() {
             })
                 .from(schema.instruments)
                 .where(lte(schema.instruments.nextCalibrationDate, thirtyDaysStr))
-                .limit(5),
+                .limit(5), [], 'upcomingCalibrationsList'),
+            safeQuery(() => db.select({
+                status: schema.instruments.status,
+                count: sql<number>`count(*)`,
+            })
+                .from(schema.instruments)
+                .groupBy(schema.instruments.status), [], 'instrumentsByStatus'),
+            safeQuery(() => db.select({
+                date: schema.usageLogs.date,
+                itemType: schema.usageLogs.itemType,
+                quantity: schema.usageLogs.quantityUsed,
+            })
+                .from(schema.usageLogs)
+                .where(gte(schema.usageLogs.date, fourMonthsAgoStr)), [], 'usageLogs'),
         ]);
-        console.log(`[Dashboard API] List queries done: ${Date.now() - startTime}ms`);
 
-        // 3. Instrument status chart
-        const instrumentsByStatus = await db.select({
-            status: schema.instruments.status,
-            count: sql<number>`count(*)`,
-        })
-            .from(schema.instruments)
-            .groupBy(schema.instruments.status);
-        console.log(`[Dashboard API] Instrument status done: ${Date.now() - startTime}ms`);
+        console.log(`[Dashboard API] Batch 1 done in: ${Date.now() - startTime}ms`);
 
-        // 4. Stock calculation - simplified approach
-        const [reagentCatalogs, standardCatalogs, itemsCatalogs] = await Promise.all([
-            db.select({ id: schema.reagentCatalog.id, minimumStockLevel: schema.reagentCatalog.minimumStockLevel })
-                .from(schema.reagentCatalog),
-            db.select({ id: schema.standardCatalog.id, minimumStockLevel: schema.standardCatalog.minimumStockLevel })
-                .from(schema.standardCatalog),
-            db.select({ id: schema.itemsCatalog.id, category: schema.itemsCatalog.category, minimumStockLevel: schema.itemsCatalog.minimumStockLevel })
-                .from(schema.itemsCatalog),
-        ]);
-        console.log(`[Dashboard API] Catalog queries done: ${Date.now() - startTime}ms`);
-
-        // 5. Stock counts with SQL raw for enum
-        const [chemicalStockCounts, itemStockSums] = await Promise.all([
-            db.select({
+        // ========== BATCH 2: Catalog and stock queries (heavier queries) ==========
+        const [
+            reagentCatalogs,
+            standardCatalogs,
+            itemsCatalogs,
+            chemicalStockCounts,
+            itemStockSums,
+            allInstruments,
+            expiringChemicalsForCal,
+            maintenanceLogs,
+            ordersList,
+        ] = await Promise.all([
+            safeQuery(() => db.select({ id: schema.reagentCatalog.id, minimumStockLevel: schema.reagentCatalog.minimumStockLevel })
+                .from(schema.reagentCatalog).limit(500), [], 'reagentCatalogs'),
+            safeQuery(() => db.select({ id: schema.standardCatalog.id, minimumStockLevel: schema.standardCatalog.minimumStockLevel })
+                .from(schema.standardCatalog).limit(500), [], 'standardCatalogs'),
+            safeQuery(() => db.select({ id: schema.itemsCatalog.id, category: schema.itemsCatalog.category, minimumStockLevel: schema.itemsCatalog.minimumStockLevel })
+                .from(schema.itemsCatalog).limit(500), [], 'itemsCatalogs'),
+            safeQuery(() => db.select({
                 catalogId: schema.warehouseChemicals.catalogId,
                 catalogType: schema.warehouseChemicals.catalogType,
                 count: sql<number>`count(*)`,
             })
                 .from(schema.warehouseChemicals)
                 .where(sql`${schema.warehouseChemicals.status} = 'tersedia'`)
-                .groupBy(schema.warehouseChemicals.catalogId, schema.warehouseChemicals.catalogType),
-
-            db.select({
+                .groupBy(schema.warehouseChemicals.catalogId, schema.warehouseChemicals.catalogType), [], 'chemicalStockCounts'),
+            safeQuery(() => db.select({
                 catalogId: schema.warehouseItems.catalogId,
                 totalQuantity: sql<number>`COALESCE(SUM(${schema.warehouseItems.currentQuantity}), 0)`,
             })
                 .from(schema.warehouseItems)
-                .groupBy(schema.warehouseItems.catalogId),
+                .groupBy(schema.warehouseItems.catalogId), [], 'itemStockSums'),
+            safeQuery(() => db.select({
+                id: schema.instruments.id,
+                name: schema.instruments.name,
+                nextCalibrationDate: schema.instruments.nextCalibrationDate,
+                location: schema.instruments.location,
+            }).from(schema.instruments).limit(50), [], 'allInstruments'),
+            safeQuery(() => db.select({
+                id: schema.warehouseChemicals.id,
+                name: schema.warehouseChemicals.name,
+                expiredDate: schema.warehouseChemicals.expiredDate,
+            })
+                .from(schema.warehouseChemicals)
+                .where(and(
+                    gte(schema.warehouseChemicals.expiredDate, startDateStr),
+                    lte(schema.warehouseChemicals.expiredDate, endDateStr)
+                ))
+                .limit(50), [], 'expiringChemicalsForCal'),
+            safeQuery(() => db.select({
+                id: schema.maintenanceLogs.id,
+                maintenanceDate: schema.maintenanceLogs.maintenanceDate,
+                maintenanceType: schema.maintenanceLogs.maintenanceType,
+                maintenanceActions: schema.maintenanceLogs.maintenanceActions,
+                instrumentId: schema.maintenanceLogs.instrumentId,
+            })
+                .from(schema.maintenanceLogs)
+                .where(and(
+                    gte(schema.maintenanceLogs.maintenanceDate, startDateStr),
+                    lte(schema.maintenanceLogs.maintenanceDate, endDateStr)
+                ))
+                .limit(50), [], 'maintenanceLogs'),
+            safeQuery(() => db.select({
+                id: schema.orders.id,
+                orderNumber: schema.orders.orderNumber,
+                orderDate: schema.orders.orderDate,
+                status: schema.orders.status,
+            })
+                .from(schema.orders)
+                .where(and(
+                    gte(schema.orders.orderDate, startDateStr),
+                    lte(schema.orders.orderDate, endDateStr)
+                ))
+                .limit(50), [], 'ordersList'),
         ]);
-        console.log(`[Dashboard API] Stock counts done: ${Date.now() - startTime}ms`);
 
-        // 6. Usage logs
-        const usageLogs = await db.select({
-            date: schema.usageLogs.date,
-            itemType: schema.usageLogs.itemType,
-            quantity: schema.usageLogs.quantityUsed,
-        })
-            .from(schema.usageLogs)
-            .where(gte(schema.usageLogs.date, fourMonthsAgoStr));
-        console.log(`[Dashboard API] Usage logs done: ${Date.now() - startTime}ms`);
+        console.log(`[Dashboard API] Batch 2 done in: ${Date.now() - startTime}ms`);
 
         // ========== Process results ==========
         const expiredCount = Number(expiringChemicals[0]?.count) || 0;
@@ -249,69 +307,7 @@ export async function GET() {
             });
         }
 
-        // ========== Get Schedule Events - ALL TYPES ==========
-        // Calculate date range: ±6 months from today
-        const sixMonthsAgo = new Date(today);
-        sixMonthsAgo.setMonth(today.getMonth() - 6);
-        const sixMonthsFromNow = new Date(today);
-        sixMonthsFromNow.setMonth(today.getMonth() + 6);
-        const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
-        const endDateStr = sixMonthsFromNow.toISOString().split('T')[0];
-
-        // Fetch all event sources in parallel
-        const [allInstruments, expiringChemicalsForCal, maintenanceLogs, ordersList] = await Promise.all([
-            // 1. Instruments for calibration events
-            db.select({
-                id: schema.instruments.id,
-                name: schema.instruments.name,
-                nextCalibrationDate: schema.instruments.nextCalibrationDate,
-                location: schema.instruments.location,
-            }).from(schema.instruments).limit(100),
-
-            // 2. Expiring chemicals for expired events
-            db.select({
-                id: schema.warehouseChemicals.id,
-                name: schema.warehouseChemicals.name,
-                expiredDate: schema.warehouseChemicals.expiredDate,
-            })
-                .from(schema.warehouseChemicals)
-                .where(and(
-                    gte(schema.warehouseChemicals.expiredDate, startDateStr),
-                    lte(schema.warehouseChemicals.expiredDate, endDateStr)
-                ))
-                .limit(100),
-
-            // 3. Maintenance logs for maintenance events
-            db.select({
-                id: schema.maintenanceLogs.id,
-                maintenanceDate: schema.maintenanceLogs.maintenanceDate,
-                maintenanceType: schema.maintenanceLogs.maintenanceType,
-                maintenanceActions: schema.maintenanceLogs.maintenanceActions,
-                instrumentId: schema.maintenanceLogs.instrumentId,
-            })
-                .from(schema.maintenanceLogs)
-                .where(and(
-                    gte(schema.maintenanceLogs.maintenanceDate, startDateStr),
-                    lte(schema.maintenanceLogs.maintenanceDate, endDateStr)
-                ))
-                .limit(100),
-
-            // 4. Orders for order events
-            db.select({
-                id: schema.orders.id,
-                orderNumber: schema.orders.orderNumber,
-                orderDate: schema.orders.orderDate,
-                status: schema.orders.status,
-            })
-                .from(schema.orders)
-                .where(and(
-                    gte(schema.orders.orderDate, startDateStr),
-                    lte(schema.orders.orderDate, endDateStr)
-                ))
-                .limit(100),
-        ]);
-        console.log(`[Dashboard API] Event sources done: ${Date.now() - startTime}ms`);
-
+        // ========== Build Schedule Events ==========
         const scheduleEvents: { id: string; title: string; date: string; type: string; location?: string | null; description?: string }[] = [];
 
         // Add calibration events
@@ -364,11 +360,9 @@ export async function GET() {
         // Sort by date
         scheduleEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        console.log(`[Dashboard API] Schedule events count: ${scheduleEvents.length}, done: ${Date.now() - startTime}ms`);
-
         console.log(`[Dashboard API] Total time: ${Date.now() - startTime}ms`);
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             stats: {
                 expiredReagents: expiredCount,
                 lowStockItems: lowStockCount,
@@ -382,6 +376,11 @@ export async function GET() {
             inventoryStockData,
             monthlyUsageData,
         });
+
+        // Add caching headers - cache for 30 seconds, stale-while-revalidate for 60 seconds
+        response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+
+        return response;
     } catch (error) {
         console.error('[Dashboard API] Error:', error);
         return NextResponse.json({
@@ -393,3 +392,4 @@ export async function GET() {
         });
     }
 }
+

@@ -7,3 +7,7 @@
 - Username: admin
 - Password: 123
 - role: admin
+
+- Username: manager
+- Password: 123
+- role: manager
