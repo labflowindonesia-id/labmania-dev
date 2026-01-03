@@ -114,10 +114,17 @@ class ChatService {
         try {
             const context = await this.buildContext();
 
+            // Get API key for webhook authentication
+            const apiKey = process.env.N8N_WEBHOOK_API_KEY;
+            if (!apiKey) {
+                console.warn('N8N_WEBHOOK_API_KEY not configured');
+            }
+
             const response = await fetch(this.webhookUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    ...(apiKey && { 'X-API-Key': apiKey }),
                 },
                 body: JSON.stringify({
                     message: userMessage,
@@ -131,6 +138,9 @@ class ChatService {
             });
 
             if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    console.error('Webhook authentication failed');
+                }
                 throw new Error(`Webhook responded with status: ${response.status}`);
             }
 

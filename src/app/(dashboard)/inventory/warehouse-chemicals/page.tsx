@@ -280,13 +280,16 @@ export default function WarehouseChemicalsPage() {
                                             <SelectValue placeholder={formData.catalogType ? "Pilih item" : "Pilih tipe dulu"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {filteredCatalogItems.map((item) => (
-                                                <SelectItem key={item.id} value={item.id}>
-                                                    {item.name}
-                                                </SelectItem>
-                                            ))}
-                                            {filteredCatalogItems.length === 0 && (
-                                                <SelectItem value="" disabled>Tidak ada item</SelectItem>
+                                            {filteredCatalogItems.length === 0 ? (
+                                                <div className="py-6 text-center text-sm text-muted-foreground">
+                                                    Tidak ada item
+                                                </div>
+                                            ) : (
+                                                filteredCatalogItems.map((item) => (
+                                                    <SelectItem key={item.id} value={item.id}>
+                                                        {item.name}
+                                                    </SelectItem>
+                                                ))
                                             )}
                                         </SelectContent>
                                     </Select>

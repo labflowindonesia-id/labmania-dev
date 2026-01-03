@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { StorageService, STORAGE_BUCKETS, BUCKET_CONFIG, StorageBucket } from '@/lib/services';
+import { validateFile, sanitizeFilename } from '@/lib/security';
 
 // POST /api/upload - Upload a file
 export async function POST(request: NextRequest) {
@@ -34,11 +35,27 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Early file validation with magic bytes
+        const validationResult = await validateFile(file);
+        if (!validationResult.valid) {
+            return NextResponse.json(
+                { error: validationResult.error || 'File tidak valid' },
+                { status: 400 }
+            );
+        }
+
+        // Sanitize filename to prevent path traversal
+        const sanitizedFile = new File(
+            [await file.arrayBuffer()],
+            sanitizeFilename(file.name),
+            { type: file.type }
+        );
+
         // Upload file
         const result = await StorageService.uploadFile(
             bucket as StorageBucket,
             folder,
-            file
+            sanitizedFile
         );
 
         if (!result.success) {

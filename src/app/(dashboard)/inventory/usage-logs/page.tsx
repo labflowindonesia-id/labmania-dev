@@ -41,6 +41,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useFetch, useMutation } from "@/hooks/use-api"
+import { useAuth } from "@/components/providers/auth-provider"
 
 interface UsageLog {
     id: string
@@ -55,23 +56,47 @@ interface UsageLog {
     }
 }
 
+// Interface for warehouse items
+interface WarehouseChemical {
+    id: string
+    name: string
+    catalogType: string
+    remainingAmount: string
+    sizeUnit: string
+    status: string
+}
+
+interface WarehouseItem {
+    id: string
+    name: string
+    category: string
+    currentQuantity: number
+    unit: string
+}
+
 const itemTypeConfig: Record<string, { label: string; color: string }> = {
     reagent: { label: "Reagen", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
     standard: { label: "Standard", color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200" },
     consumable: { label: "Consumable", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-    barang: { label: "Barang", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
 }
 
 export default function UsageLogsPage() {
+    const { user } = useAuth()
     const [search, setSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [deleteId, setDeleteId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
+    // Warehouse items state
+    const [warehouseChemicals, setWarehouseChemicals] = useState<WarehouseChemical[]>([])
+    const [warehouseItems, setWarehouseItems] = useState<WarehouseItem[]>([])
+    const [isLoadingWarehouse, setIsLoadingWarehouse] = useState(false)
+
     // Form state
     const [formData, setFormData] = useState({
         usageItem: "",
+        warehouseItemId: "",
         itemType: "",
         quantityUsed: "",
         unit: "",
@@ -79,11 +104,98 @@ export default function UsageLogsPage() {
         date: new Date().toISOString().split("T")[0],
     })
 
+    // Fetch warehouse data when dialog opens
+    useEffect(() => {
+        if (isAddDialogOpen) {
+            fetchWarehouseData()
+        }
+    }, [isAddDialogOpen])
+
+    const fetchWarehouseData = async () => {
+        setIsLoadingWarehouse(true)
+        try {
+            // Fetch warehouse chemicals (reagent & standard)
+            const chemicalsRes = await fetch("/api/inventory/warehouse-chemicals")
+            const chemicalsData = await chemicalsRes.json()
+            if (chemicalsData.data) {
+                // Filter by stock availability (remainingAmount > 0 and status tersedia)
+                const availableChemicals = chemicalsData.data.filter(
+                    (c: WarehouseChemical) => parseFloat(c.remainingAmount) > 0 && c.status === "tersedia"
+                )
+                setWarehouseChemicals(availableChemicals)
+            }
+
+            // Fetch warehouse items (consumable)
+            const itemsRes = await fetch("/api/inventory/warehouse-items?category=consumable")
+            const itemsData = await itemsRes.json()
+            if (itemsData.data) {
+                // Filter by stock availability (currentQuantity > 0)
+                const availableItems = itemsData.data.filter(
+                    (i: WarehouseItem) => i.currentQuantity > 0
+                )
+                setWarehouseItems(availableItems)
+            }
+        } catch (error) {
+            console.error("Error fetching warehouse data:", error)
+        } finally {
+            setIsLoadingWarehouse(false)
+        }
+    }
+
+    // Get filtered items based on selected type
+    const getFilteredWarehouseItems = () => {
+        if (formData.itemType === "reagent") {
+            return warehouseChemicals.filter(c => c.catalogType === "reagent")
+        } else if (formData.itemType === "standard") {
+            return warehouseChemicals.filter(c => c.catalogType === "standard")
+        } else if (formData.itemType === "consumable") {
+            return warehouseItems.filter(i => i.category === "consumable")
+        }
+        return []
+    }
+
+    // Handle item selection
+    const handleItemSelect = (itemId: string) => {
+        let selectedItem: { name: string; unit: string } | null = null
+
+        if (formData.itemType === "reagent" || formData.itemType === "standard") {
+            const chemical = warehouseChemicals.find(c => c.id === itemId)
+            if (chemical) {
+                selectedItem = { name: chemical.name, unit: chemical.sizeUnit }
+            }
+        } else if (formData.itemType === "consumable") {
+            const item = warehouseItems.find(i => i.id === itemId)
+            if (item) {
+                selectedItem = { name: item.name, unit: item.unit }
+            }
+        }
+
+        if (selectedItem) {
+            setFormData({
+                ...formData,
+                warehouseItemId: itemId,
+                usageItem: selectedItem.name,
+                unit: selectedItem.unit,
+            })
+        }
+    }
+
+    // Handle type change - reset item selection
+    const handleTypeChange = (value: string) => {
+        setFormData({
+            ...formData,
+            itemType: value,
+            warehouseItemId: "",
+            usageItem: "",
+            unit: "",
+        })
+    }
+
     // Fetch usage logs from API
     const { data, isLoading, error, refetch } = useFetch<{ usageLogs: UsageLog[] }>("/api/inventory/usage-logs")
 
     // Create mutation
-    const createMutation = useMutation<UsageLog, typeof formData>(
+    const createMutation = useMutation<UsageLog, typeof formData & { userId?: string }>(
         "/api/inventory/usage-logs",
         "POST",
         {
@@ -91,6 +203,7 @@ export default function UsageLogsPage() {
                 setIsAddDialogOpen(false)
                 setFormData({
                     usageItem: "",
+                    warehouseItemId: "",
                     itemType: "",
                     quantityUsed: "",
                     unit: "",
@@ -103,10 +216,13 @@ export default function UsageLogsPage() {
     )
 
     const handleSubmit = async () => {
-        if (!formData.usageItem || !formData.itemType || !formData.quantityUsed) {
+        if (!formData.usageItem || !formData.itemType || !formData.quantityUsed || !user?.id) {
             return
         }
-        await createMutation.mutate(formData)
+        await createMutation.mutate({
+            ...formData,
+            userId: user.id,
+        } as Parameters<typeof createMutation.mutate>[0])
     }
 
     const handleDelete = async () => {
@@ -156,6 +272,8 @@ export default function UsageLogsPage() {
         )
     }
 
+    const filteredWarehouseItems = getFilteredWarehouseItems()
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -186,7 +304,7 @@ export default function UsageLogsPage() {
                                     <Label htmlFor="itemType">Tipe Item *</Label>
                                     <Select
                                         value={formData.itemType}
-                                        onValueChange={(value) => setFormData({ ...formData, itemType: value })}
+                                        onValueChange={handleTypeChange}
                                     >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Pilih tipe" />
@@ -195,7 +313,6 @@ export default function UsageLogsPage() {
                                             <SelectItem value="reagent">Reagen</SelectItem>
                                             <SelectItem value="standard">Standard</SelectItem>
                                             <SelectItem value="consumable">Consumable</SelectItem>
-                                            <SelectItem value="barang">Barang</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -211,12 +328,39 @@ export default function UsageLogsPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="usageItem">Nama Item *</Label>
-                                <Input
-                                    id="usageItem"
-                                    placeholder="Contoh: NaOH 1M, Pipet Tips 1000ul"
-                                    value={formData.usageItem}
-                                    onChange={(e) => setFormData({ ...formData, usageItem: e.target.value })}
-                                />
+                                <Select
+                                    value={formData.warehouseItemId}
+                                    onValueChange={handleItemSelect}
+                                    disabled={!formData.itemType || isLoadingWarehouse}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={
+                                            isLoadingWarehouse
+                                                ? "Memuat data..."
+                                                : !formData.itemType
+                                                    ? "Pilih tipe item terlebih dahulu"
+                                                    : "Pilih item dari gudang"
+                                        } />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {filteredWarehouseItems.length === 0 ? (
+                                            <div className="py-6 text-center text-sm text-muted-foreground">
+                                                Tidak ada item tersedia
+                                            </div>
+                                        ) : (
+                                            filteredWarehouseItems.map((item) => (
+                                                <SelectItem key={item.id} value={item.id}>
+                                                    {item.name} {formData.itemType !== "consumable" && (
+                                                        <>({(item as WarehouseChemical).remainingAmount} {(item as WarehouseChemical).sizeUnit})</>
+                                                    )}
+                                                    {formData.itemType === "consumable" && (
+                                                        <>({(item as WarehouseItem).currentQuantity} {(item as WarehouseItem).unit})</>
+                                                    )}
+                                                </SelectItem>
+                                            ))
+                                        )}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
@@ -231,22 +375,13 @@ export default function UsageLogsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="unit">Satuan</Label>
-                                    <Select
+                                    <Input
+                                        id="unit"
                                         value={formData.unit}
-                                        onValueChange={(value) => setFormData({ ...formData, unit: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Pilih satuan" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="ml">ml</SelectItem>
-                                            <SelectItem value="L">L</SelectItem>
-                                            <SelectItem value="g">g</SelectItem>
-                                            <SelectItem value="kg">kg</SelectItem>
-                                            <SelectItem value="pcs">pcs</SelectItem>
-                                            <SelectItem value="pack">pack</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                        disabled
+                                        placeholder="Auto-fill dari item"
+                                        className="bg-muted"
+                                    />
                                 </div>
                             </div>
                             <div className="space-y-2">
@@ -296,7 +431,6 @@ export default function UsageLogsPage() {
                         <SelectItem value="reagent">Reagen</SelectItem>
                         <SelectItem value="standard">Standard</SelectItem>
                         <SelectItem value="consumable">Consumable</SelectItem>
-                        <SelectItem value="barang">Barang</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

@@ -249,8 +249,8 @@ export default function ReagentsPage() {
         return matchesSearch && matchesStatus
     })
 
-    // Form fields component for reuse
-    const FormFields = () => (
+    // Form fields JSX - inlined to prevent focus loss on re-render
+    const formFieldsContent = (
         <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -423,7 +423,7 @@ export default function ReagentsPage() {
                                 Masukkan informasi reagen yang akan ditambahkan ke katalog
                             </DialogDescription>
                         </DialogHeader>
-                        <FormFields />
+                        {formFieldsContent}
                         <DialogFooter>
                             <Button variant="outline" onClick={() => { setIsAddDialogOpen(false); resetForm() }}>
                                 Batal
@@ -452,7 +452,7 @@ export default function ReagentsPage() {
                             Ubah informasi reagen
                         </DialogDescription>
                     </DialogHeader>
-                    <FormFields />
+                    {formFieldsContent}
                     <DialogFooter>
                         <Button variant="outline" onClick={() => { setIsEditDialogOpen(false); resetForm(); setEditingReagent(null) }}>
                             Batal

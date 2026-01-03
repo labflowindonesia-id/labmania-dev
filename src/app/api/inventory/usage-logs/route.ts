@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { usageLogService } from '@/lib/services';
+import { warehouseChemicalService } from '@/lib/services/warehouse-chemical.service';
+import { warehouseItemService } from '@/lib/services/warehouse-item.service';
 
 export async function GET(request: NextRequest) {
     try {
@@ -34,6 +36,38 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Reduce stock from warehouse based on item type
+        if (body.warehouseItemId && body.quantityUsed) {
+            const quantityUsed = parseFloat(body.quantityUsed);
+
+            if (body.itemType === 'reagent' || body.itemType === 'standard') {
+                // Reduce stock from warehouse chemicals
+                const chemical = await warehouseChemicalService.getById(body.warehouseItemId);
+                if (chemical) {
+                    const currentAmount = parseFloat(chemical.remainingAmount);
+                    const newAmount = Math.max(0, currentAmount - quantityUsed);
+
+                    // Update remaining amount and status
+                    const newStatus = newAmount <= 0 ? 'habis' : 'tersedia';
+                    await warehouseChemicalService.update(body.warehouseItemId, {
+                        remainingAmount: newAmount.toString(),
+                        status: newStatus,
+                    });
+                }
+            } else if (body.itemType === 'consumable') {
+                // Reduce stock from warehouse items
+                const item = await warehouseItemService.getById(body.warehouseItemId);
+                if (item) {
+                    const currentQuantity = item.currentQuantity;
+                    const newQuantity = Math.max(0, currentQuantity - quantityUsed);
+
+                    await warehouseItemService.update(body.warehouseItemId, {
+                        currentQuantity: newQuantity,
+                    });
+                }
+            }
+        }
+
         const usageLog = await usageLogService.create({
             date: body.date,
             userId: body.userId,
@@ -53,3 +87,4 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
