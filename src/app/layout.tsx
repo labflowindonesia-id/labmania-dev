@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LabFlow Assets - Manajemen Laboratorium",
   description: "Sistem informasi manajemen laboratorium untuk inventory, instrumen, dan kalibrasi",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
