@@ -110,7 +110,7 @@ class ChatService {
     /**
      * Send message to n8n webhook with database context
      */
-    async sendMessage(userMessage: string): Promise<string> {
+    async sendMessage(userMessage: string, sessionId?: string, userId?: string): Promise<string> {
         try {
             const context = await this.buildContext();
 
@@ -128,6 +128,8 @@ class ChatService {
                 },
                 body: JSON.stringify({
                     message: userMessage,
+                    sessionId: sessionId || null,
+                    userId: userId || null,
                     context: {
                         timestamp: new Date().toISOString(),
                         stockSummary: context.stockSummary,

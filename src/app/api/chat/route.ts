@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { message } = body;
+        const { message, sessionId, userId } = body;
 
         if (!message) {
             return NextResponse.json(
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const response = await chatService.sendMessage(sanitizedMessage);
+        const response = await chatService.sendMessage(sanitizedMessage, sessionId, userId);
 
         // Include rate limit headers in successful response
         const headers = getRateLimitHeaders('chat', rateLimit.remaining, rateLimit.resetIn);

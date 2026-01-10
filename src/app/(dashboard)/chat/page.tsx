@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { Bot, Send, User, CheckCircle2, HelpCircle, AlertTriangle, Shield, Database, FileText, UserCheck, Server, RefreshCw } from "lucide-react"
+import { useState, useRef, useEffect, useMemo } from "react"
+import { Bot, Send, User, HelpCircle, AlertTriangle, Shield, Database, FileText, UserCheck, Server, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,6 +15,24 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/providers/auth-provider"
+import ReactMarkdown from "react-markdown"
+import remarkMath from "remark-math"
+import remarkGfm from "remark-gfm"
+import rehypeKatex from "rehype-katex"
+import "katex/dist/katex.min.css"
+
+// Generate UUID v4
+function generateUUID(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+// Session ID key for sessionStorage
+const CHAT_SESSION_ID_KEY = 'labmania_chat_session_id';
 
 interface Message {
     id: string
@@ -23,20 +41,29 @@ interface Message {
     timestamp: Date
 }
 
-// Initial welcome message from LIMS Assistant
+// Initial welcome message from Flo
 const welcomeMessage: Message = {
     id: "welcome",
-    content: `Halo! Saya LIMS Assistant, asisten virtual laboratorium Anda.
+    content: `Halo! Saya Flo, asisten virtual laboratorium Anda.
 
 Saya dapat membantu Anda dengan:
-• Mengecek stok inventory dan status
-• Melihat jadwal kalibrasi instrumen
-• Memberikan informasi instruksi kerja alat
-• Menjawab pertanyaan tentang MSDS
+
+- Mengecek stok inventory dan status
+- Melihat jadwal kalibrasi instrumen
+- Memberikan informasi instruksi kerja alat
+- Menjawab pertanyaan tentang MSDS
 
 Apa yang bisa saya bantu hari ini?`,
     sender: "bot",
     timestamp: new Date(),
+}
+
+// Preprocess markdown to fix formatting from webhook
+// The webhook sends literal \n strings instead of actual newlines
+function preprocessMarkdown(content: string): string {
+    // Convert literal \n strings to actual newlines
+    // The webhook sends "\\n" as a string instead of actual newline characters
+    return content.replace(/\\n/g, '\n');
 }
 
 // Quick action suggestions
@@ -47,11 +74,22 @@ const quickActions = [
 ]
 
 export default function ChatPage() {
+    const { user } = useAuth()
     const [messages, setMessages] = useState<Message[]>([welcomeMessage])
     const [inputValue, setInputValue] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [isTermsOpen, setIsTermsOpen] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+
+    // Generate session ID on component mount (resets on page refresh)
+    const sessionId = useMemo(() => {
+        if (typeof window === 'undefined') return '';
+
+        // Always generate a new session ID on page load/refresh
+        const newSessionId = generateUUID();
+        sessionStorage.setItem(CHAT_SESSION_ID_KEY, newSessionId);
+        return newSessionId;
+    }, [])
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -85,7 +123,11 @@ export default function ChatPage() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ message: content.trim() }),
+                body: JSON.stringify({
+                    message: content.trim(),
+                    sessionId,
+                    userId: user?.id || null
+                }),
             })
 
             const data = await response.json()
@@ -131,7 +173,7 @@ export default function ChatPage() {
                         <Bot className="h-6 w-6" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-semibold text-foreground">LIMS Assistant</h1>
+                        <h1 className="text-lg font-semibold text-foreground">Assets Assistant</h1>
                         <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                             <span className="text-sm text-muted-foreground">Asisten virtual laboratorium</span>
@@ -321,23 +363,96 @@ export default function ChatPage() {
                                 )}
                             >
                                 {message.sender === "bot" ? (
-                                    <div className="space-y-2">
-                                        {message.content.split("\n").map((line, i) => {
-                                            // Check if line starts with bullet point
-                                            if (line.startsWith("•")) {
-                                                return (
-                                                    <div key={i} className="flex items-start gap-2">
-                                                        <CheckCircle2 className="h-4 w-4 text-[#0ea5e9] mt-0.5 flex-shrink-0" />
-                                                        <span className="text-sm">{line.substring(1).trim()}</span>
+                                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkGfm, remarkMath]}
+                                            rehypePlugins={[rehypeKatex]}
+                                            components={{
+                                                // Paragraphs
+                                                p: ({ children }) => <p className="text-sm mb-2 last:mb-0">{children}</p>,
+                                                // Bold
+                                                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                                                // Italic
+                                                em: ({ children }) => <em className="italic">{children}</em>,
+                                                // Inline code
+                                                code: ({ children, className }) => {
+                                                    const isBlock = className?.includes('language-');
+                                                    if (isBlock) {
+                                                        return (
+                                                            <code className="block bg-gray-200 dark:bg-gray-700 rounded-md p-3 text-xs font-mono overflow-x-auto my-2">
+                                                                {children}
+                                                            </code>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <code className="bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs font-mono">
+                                                            {children}
+                                                        </code>
+                                                    );
+                                                },
+                                                // Code blocks
+                                                pre: ({ children }) => <pre className="bg-gray-200 dark:bg-gray-700 rounded-md p-3 text-xs font-mono overflow-x-auto my-2">{children}</pre>,
+                                                // Links
+                                                a: ({ href, children }) => (
+                                                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#0ea5e9] hover:underline">
+                                                        {children}
+                                                    </a>
+                                                ),
+                                                // Unordered lists
+                                                ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-sm">{children}</ul>,
+                                                // Ordered lists
+                                                ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-sm">{children}</ol>,
+                                                // List items
+                                                li: ({ children }) => <li className="text-sm">{children}</li>,
+                                                // Headings
+                                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                                                h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                                                // Blockquote
+                                                blockquote: ({ children }) => (
+                                                    <blockquote className="border-l-4 border-[#0ea5e9] pl-3 my-2 italic text-muted-foreground">
+                                                        {children}
+                                                    </blockquote>
+                                                ),
+                                                // Horizontal rule
+                                                hr: () => <hr className="my-3 border-gray-300 dark:border-gray-600" />,
+                                                // Tables
+                                                table: ({ children }) => (
+                                                    <div className="overflow-x-auto my-3">
+                                                        <table className="min-w-full text-xs border-collapse border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                                                            {children}
+                                                        </table>
                                                     </div>
-                                                )
-                                            }
-                                            return line ? (
-                                                <p key={i} className="text-sm">{line}</p>
-                                            ) : (
-                                                <div key={i} className="h-2" />
-                                            )
-                                        })}
+                                                ),
+                                                thead: ({ children }) => (
+                                                    <thead className="bg-gray-200 dark:bg-gray-700">
+                                                        {children}
+                                                    </thead>
+                                                ),
+                                                tbody: ({ children }) => (
+                                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                                                        {children}
+                                                    </tbody>
+                                                ),
+                                                tr: ({ children }) => (
+                                                    <tr className="hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                                                        {children}
+                                                    </tr>
+                                                ),
+                                                th: ({ children }) => (
+                                                    <th className="px-3 py-2 text-left font-semibold text-foreground border-b border-gray-300 dark:border-gray-600">
+                                                        {children}
+                                                    </th>
+                                                ),
+                                                td: ({ children }) => (
+                                                    <td className="px-3 py-2 text-muted-foreground border-b border-gray-200 dark:border-gray-700">
+                                                        {children}
+                                                    </td>
+                                                ),
+                                            }}
+                                        >
+                                            {preprocessMarkdown(message.content)}
+                                        </ReactMarkdown>
                                     </div>
                                 ) : (
                                     <p className="text-sm">{message.content}</p>
@@ -391,7 +506,7 @@ export default function ChatPage() {
                     <Input
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder="Ketik pesan untuk LIMS Assistant..."
+                        placeholder="Ketik pesan untuk Flo..."
                         className="flex-1 rounded-full px-4 py-3 h-12 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 focus-visible:ring-[#0ea5e9]"
                         disabled={isLoading}
                     />
