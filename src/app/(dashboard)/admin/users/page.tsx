@@ -41,7 +41,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Plus, Search, Users, Edit, Trash2, Loader2, RefreshCw, Shield } from "lucide-react"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface User {
     id: string
@@ -61,7 +62,7 @@ const roleConfig: Record<UserRole, { label: string; variant: "default" | "second
 }
 
 export default function AdminUsersPage() {
-    const [search, setSearch] = useState("")
+    const [roleFilter, setRoleFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -82,8 +83,12 @@ export default function AdminUsersPage() {
         role: "analyst" as UserRole,
     })
 
-    // Fetch users from API
-    const { data, isLoading, error, refetch } = useFetch<{ users: User[] }>("/api/admin/users")
+    // Fetch users from API with pagination
+    const { data: users, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<User>(
+        "/api/admin/users",
+        { role: roleFilter }
+    )
+    const displayUsers = users || []
 
     // Create mutation
     const createMutation = useMutation<User, typeof createForm>(
@@ -123,15 +128,6 @@ export default function AdminUsersPage() {
             }
         }
     )
-
-    const users = data?.users || []
-
-    const filteredUsers = users.filter((user) => {
-        const matchesSearch =
-            user.username.toLowerCase().includes(search.toLowerCase()) ||
-            user.fullName.toLowerCase().includes(search.toLowerCase())
-        return matchesSearch
-    })
 
     const handleCreate = async () => {
         if (!createForm.username || !createForm.password || !createForm.fullName) return
@@ -338,7 +334,7 @@ export default function AdminUsersPage() {
                 <CardHeader>
                     <CardTitle>Daftar Pengguna</CardTitle>
                     <CardDescription>
-                        {filteredUsers.length} pengguna ditemukan
+                        {displayUsers.length} pengguna ditemukan
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -353,14 +349,14 @@ export default function AdminUsersPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredUsers.length === 0 ? (
+                            {displayUsers.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                                         Tidak ada pengguna ditemukan
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredUsers.map((user) => (
+                                displayUsers.map((user) => (
                                     <TableRow key={user.id}>
                                         <TableCell className="font-medium">{user.username}</TableCell>
                                         <TableCell>{user.fullName}</TableCell>
@@ -396,6 +392,14 @@ export default function AdminUsersPage() {
                     </Table>
                 </CardContent>
             </Card>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Edit Dialog */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

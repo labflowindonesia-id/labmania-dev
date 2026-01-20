@@ -13,13 +13,28 @@ export interface UsageLogFilters {
     itemType?: string;
     startDate?: string;
     endDate?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedUsageLogsResult {
+    data: UsageLogWithUser[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
 }
 
 class UsageLogService {
     /**
-     * Get all usage logs with user info
+     * Get all usage logs with user info (paginated)
      */
-    async getAll(filters?: UsageLogFilters): Promise<UsageLogWithUser[]> {
+    async getAll(filters?: UsageLogFilters): Promise<PaginatedUsageLogsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const logs = await db.query.usageLogs.findMany({
             orderBy: desc(schema.usageLogs.date),
             with: {
@@ -51,7 +66,21 @@ class UsageLogService {
             filteredLogs = filteredLogs.filter(l => new Date(l.date) <= endDate);
         }
 
-        return filteredLogs;
+        // Calculate pagination
+        const total = filteredLogs.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedLogs = filteredLogs.slice(offset, offset + limit);
+
+        return {
+            data: paginatedLogs,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

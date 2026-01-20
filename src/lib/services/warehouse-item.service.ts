@@ -20,11 +20,31 @@ export interface CreateWarehouseItemInput {
     receivedByName?: string; // For static values like GAP/KEP/Manager
 }
 
+export interface WarehouseItemFilters {
+    search?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedWarehouseItemsResult {
+    data: WarehouseItemWithUser[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
 class WarehouseItemService {
     /**
-     * Get all warehouse items with optional category filter
+     * Get all warehouse items with optional category filter (paginated)
      */
-    async getAll(category?: string): Promise<WarehouseItemWithUser[]> {
+    async getAll(filters?: WarehouseItemFilters): Promise<PaginatedWarehouseItemsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const items = await db.query.warehouseItems.findMany({
             orderBy: desc(schema.warehouseItems.createdAt),
             with: {
@@ -33,12 +53,35 @@ class WarehouseItemService {
             },
         });
 
-        let filtered = items;
-        if (category && category !== 'all') {
-            filtered = items.filter(item => item.category === category);
+        let filtered = items as WarehouseItemWithUser[];
+
+        if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            filtered = filtered.filter(item =>
+                item.name.toLowerCase().includes(searchLower) ||
+                (item.lotNo && item.lotNo.toLowerCase().includes(searchLower))
+            );
         }
 
-        return filtered as WarehouseItemWithUser[];
+        if (filters?.category && filters.category !== 'all') {
+            filtered = filtered.filter(item => item.category === filters.category);
+        }
+
+        // Calculate pagination
+        const total = filtered.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedItems = filtered.slice(offset, offset + limit);
+
+        return {
+            data: paginatedItems,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

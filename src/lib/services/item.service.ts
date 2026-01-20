@@ -11,13 +11,29 @@ export interface ItemFilters {
     search?: string;
     category?: string;
     status?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedItemsResult {
+    data: ItemWithStock[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
 }
 
 class ItemService {
     /**
-     * Get all items with calculated stock
+     * Get all items with calculated stock (paginated)
      */
-    async getAll(filters?: ItemFilters): Promise<ItemWithStock[]> {
+    async getAll(filters?: ItemFilters): Promise<PaginatedItemsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
+        // Get all items first (we need to calculate stock for filtering)
         const items = await db.query.itemsCatalog.findMany({
             orderBy: desc(schema.itemsCatalog.createdAt),
         });
@@ -72,7 +88,21 @@ class ItemService {
             filteredItems = filteredItems.filter(i => i.status === filters.status);
         }
 
-        return filteredItems;
+        // Calculate pagination
+        const total = filteredItems.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedItems = filteredItems.slice(offset, offset + limit);
+
+        return {
+            data: paginatedItems,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

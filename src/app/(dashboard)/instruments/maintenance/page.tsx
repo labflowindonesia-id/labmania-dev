@@ -43,7 +43,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, Wrench, Pencil, Trash2, CheckCircle2, Clock, AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { MaintenanceStatus, MaintenanceType } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useFetch, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface MaintenanceLog {
     id: string
@@ -78,7 +79,6 @@ const typeConfig: Record<MaintenanceType, { label: string; color: string }> = {
 }
 
 export default function MaintenancePage() {
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -106,11 +106,16 @@ export default function MaintenancePage() {
         status: "pending" as MaintenanceStatus,
     })
 
-    // Fetch maintenance logs from API
-    const { data, isLoading, error, refetch } = useFetch<{ logs: MaintenanceLog[] }>("/api/instruments/maintenance")
+    // Fetch maintenance logs from API with pagination
+    const { data: logs, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<MaintenanceLog>(
+        "/api/instruments/maintenance",
+        { status: statusFilter, maintenanceType: typeFilter }
+    )
+    const displayLogs = logs || []
 
     // Fetch instruments for dropdown
-    const { data: instrumentsData } = useFetch<{ instruments: InstrumentOption[] }>("/api/instruments")
+    const { data: instrumentsData } = useFetch<{ data: InstrumentOption[], pagination: { total: number } }>("/api/instruments")
+    const instruments = instrumentsData?.data || []
 
     // Create mutation
     const createMutation = useMutation<MaintenanceLog, typeof formData>(
@@ -194,20 +199,10 @@ export default function MaintenancePage() {
         await deleteMutation.mutate(undefined)
     }
 
-    const logs = data?.logs || []
-    const instruments = instrumentsData?.instruments || []
-
-    const filteredLogs = logs.filter((log) => {
-        const matchesSearch = log.instrumentName.toLowerCase().includes(search.toLowerCase())
-        const matchesStatus = statusFilter === "all" || log.status === statusFilter
-        const matchesType = typeFilter === "all" || log.maintenanceType === typeFilter
-        return matchesSearch && matchesStatus && matchesType
-    })
-
     // Stats
-    const completedCount = logs.filter(l => l.status === "completed").length
-    const scheduledCount = logs.filter(l => l.status === "scheduled").length
-    const totalCount = logs.length
+    const completedCount = displayLogs.filter(l => l.status === "completed").length
+    const scheduledCount = displayLogs.filter(l => l.status === "scheduled").length
+    const totalCount = pagination.total
 
     // Loading state
     if (isLoading) {
@@ -448,7 +443,7 @@ export default function MaintenancePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredLogs.map((log) => (
+                        {displayLogs.map((log) => (
                             <TableRow key={log.id}>
                                 <TableCell>{new Date(log.maintenanceDate).toLocaleDateString("id-ID")}</TableCell>
                                 <TableCell className="font-medium">{log.instrumentName}</TableCell>
@@ -481,11 +476,19 @@ export default function MaintenancePage() {
                 </Table>
             </div>
 
-            {filteredLogs.length === 0 && (
+            {displayLogs.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Wrench className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada log maintenance ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
 
             {/* Edit Dialog */}

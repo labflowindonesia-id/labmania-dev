@@ -15,6 +15,23 @@ export interface CreateOrderInput {
     notes?: string;
 }
 
+export interface OrderFilters {
+    search?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedOrdersResult {
+    data: OrderWithItems[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
 class OrderService {
     /**
      * Generate next order number
@@ -39,9 +56,12 @@ class OrderService {
     }
 
     /**
-     * Get all orders with items
+     * Get all orders with items (paginated)
      */
-    async getAll(status?: string): Promise<OrderWithItems[]> {
+    async getAll(filters?: OrderFilters): Promise<PaginatedOrdersResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const orders = await db.query.orders.findMany({
             orderBy: desc(schema.orders.createdAt),
             with: {
@@ -51,12 +71,35 @@ class OrderService {
             },
         });
 
-        let filteredOrders = orders;
-        if (status && status !== 'all') {
-            filteredOrders = orders.filter(o => o.status === status);
+        let filteredOrders = orders as OrderWithItems[];
+
+        if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            filteredOrders = filteredOrders.filter(
+                o => o.orderNumber.toLowerCase().includes(searchLower) ||
+                    o.orderedByUser?.fullName.toLowerCase().includes(searchLower)
+            );
         }
 
-        return filteredOrders as OrderWithItems[];
+        if (filters?.status && filters.status !== 'all') {
+            filteredOrders = filteredOrders.filter(o => o.status === filters.status);
+        }
+
+        // Calculate pagination
+        const total = filteredOrders.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedOrders = filteredOrders.slice(offset, offset + limit);
+
+        return {
+            data: paginatedOrders,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

@@ -4,12 +4,18 @@ import { warehouseChemicalService } from '@/lib/services/warehouse-chemical.serv
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const status = searchParams.get('status') || undefined;
+        const filters = {
+            search: searchParams.get('search') || undefined,
+            status: searchParams.get('status') || undefined,
+            catalogType: searchParams.get('catalogType') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
+        };
 
-        const chemicals = await warehouseChemicalService.getAll(status);
+        const result = await warehouseChemicalService.getAll(filters);
 
         // Calculate days until expiry for each chemical
-        const chemicalsWithExpiry = chemicals.map(chemical => {
+        const chemicalsWithExpiry = result.data.map(chemical => {
             const expiredDate = new Date(chemical.expiredDate);
             const today = new Date();
             const diffTime = expiredDate.getTime() - today.getTime();
@@ -21,7 +27,10 @@ export async function GET(request: Request) {
             };
         });
 
-        return NextResponse.json({ data: chemicalsWithExpiry });
+        return NextResponse.json({
+            data: chemicalsWithExpiry,
+            pagination: result.pagination
+        });
     } catch (error) {
         console.error('Error fetching warehouse chemicals:', error);
         return NextResponse.json(

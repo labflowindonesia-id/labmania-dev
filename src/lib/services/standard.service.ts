@@ -13,13 +13,28 @@ export interface StandardFilters {
     search?: string;
     status?: string;
     location?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedStandardsResult {
+    data: StandardWithStock[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
 }
 
 class StandardService {
     /**
-     * Get all standards with calculated stock
+     * Get all standards with calculated stock (paginated)
      */
-    async getAll(filters?: StandardFilters): Promise<StandardWithStock[]> {
+    async getAll(filters?: StandardFilters): Promise<PaginatedStandardsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const standards = await db.query.standardCatalog.findMany({
             orderBy: desc(schema.standardCatalog.createdAt),
         });
@@ -92,7 +107,21 @@ class StandardService {
             filteredStandards = filteredStandards.filter(s => s.storageLocation === filters.location);
         }
 
-        return filteredStandards;
+        // Calculate pagination
+        const total = filteredStandards.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedStandards = filteredStandards.slice(offset, offset + limit);
+
+        return {
+            data: paginatedStandards,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

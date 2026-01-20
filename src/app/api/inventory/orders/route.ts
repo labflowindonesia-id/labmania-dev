@@ -4,10 +4,15 @@ import { orderService, authService } from '@/lib/services';
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
-        const status = searchParams.get('status') || undefined;
+        const filters = {
+            search: searchParams.get('search') || undefined,
+            status: searchParams.get('status') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
+        };
 
-        const orders = await orderService.getAll(status);
-        return NextResponse.json({ data: orders });
+        const result = await orderService.getAll(filters);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Get orders API error:', error);
         return NextResponse.json(

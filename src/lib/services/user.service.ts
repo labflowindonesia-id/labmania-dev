@@ -16,15 +16,65 @@ export interface UpdateUserInput {
     role?: 'admin' | 'manager' | 'analyst';
 }
 
+export interface UserFilters {
+    search?: string;
+    role?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedUsersResult {
+    data: Profile[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
 class UserService {
     /**
-     * Get all users (admin only)
+     * Get all users (admin only) - paginated
      */
-    async getAll(): Promise<Profile[]> {
+    async getAll(filters?: UserFilters): Promise<PaginatedUsersResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const users = await db.query.profiles.findMany({
             orderBy: desc(schema.profiles.createdAt),
         });
-        return users;
+
+        // Apply filters
+        let filteredUsers = users;
+
+        if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            filteredUsers = filteredUsers.filter(
+                u => u.username.toLowerCase().includes(searchLower) ||
+                    u.fullName.toLowerCase().includes(searchLower)
+            );
+        }
+
+        if (filters?.role && filters.role !== 'all') {
+            filteredUsers = filteredUsers.filter(u => u.role === filters.role);
+        }
+
+        // Calculate pagination
+        const total = filteredUsers.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedUsers = filteredUsers.slice(offset, offset + limit);
+
+        return {
+            data: paginatedUsers,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

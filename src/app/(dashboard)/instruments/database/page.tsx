@@ -40,7 +40,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Plus, Search, Microscope, ChevronDown, Trash2, Calendar, Eye, Loader2, RefreshCw, Image, X } from "lucide-react"
 import { InstrumentStatus, AssetType } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface Instrument {
     id: string
@@ -70,7 +71,6 @@ const statusConfig: Record<InstrumentStatus, { label: string; variant: "default"
 }
 
 export default function InstrumentDatabasePage() {
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -131,8 +131,12 @@ export default function InstrumentDatabasePage() {
         setFormData((prev) => ({ ...prev, photo: "" }))
     }
 
-    // Fetch instruments from API
-    const { data, isLoading, error, refetch } = useFetch<{ instruments: Instrument[] }>("/api/instruments")
+    // Fetch instruments from API with pagination
+    const { data: instruments, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Instrument>(
+        "/api/instruments",
+        { status: statusFilter, type: typeFilter }
+    )
+    const displayInstruments = instruments || []
 
     // Create mutation
     const createMutation = useMutation<Instrument, typeof formData>(
@@ -184,16 +188,6 @@ export default function InstrumentDatabasePage() {
             setDeleteId(null)
         }
     }
-
-    const instruments = data?.instruments || []
-
-    const filteredInstruments = instruments.filter((inst) => {
-        const matchesSearch = inst.name.toLowerCase().includes(search.toLowerCase()) ||
-            (inst.brand?.toLowerCase().includes(search.toLowerCase()) ?? false)
-        const matchesStatus = statusFilter === "all" || inst.status === statusFilter
-        const matchesType = typeFilter === "all" || inst.assetType === typeFilter
-        return matchesSearch && matchesStatus && matchesType
-    })
 
     // Loading state
     if (isLoading) {
@@ -418,7 +412,7 @@ export default function InstrumentDatabasePage() {
 
             {/* Expandable List */}
             <div className="space-y-3">
-                {filteredInstruments.map((instrument) => (
+                {displayInstruments.map((instrument) => (
                     <Collapsible
                         key={instrument.id}
                         open={openItems.includes(instrument.id)}
@@ -525,11 +519,19 @@ export default function InstrumentDatabasePage() {
                 ))}
             </div>
 
-            {filteredInstruments.length === 0 && (
+            {displayInstruments.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Microscope className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada instrumen ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
 
             {/* Delete Confirmation Dialog */}

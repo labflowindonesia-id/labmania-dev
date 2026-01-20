@@ -40,7 +40,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 import { useAuth } from "@/components/providers/auth-provider"
 
 interface UsageLog {
@@ -82,7 +83,6 @@ const itemTypeConfig: Record<string, { label: string; color: string }> = {
 
 export default function UsageLogsPage() {
     const { user } = useAuth()
-    const [search, setSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -191,8 +191,12 @@ export default function UsageLogsPage() {
         })
     }
 
-    // Fetch usage logs from API
-    const { data, isLoading, error, refetch } = useFetch<{ usageLogs: UsageLog[] }>("/api/inventory/usage-logs")
+    // Fetch usage logs from API with pagination
+    const { data: usageLogs, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<UsageLog>(
+        "/api/inventory/usage-logs",
+        { itemType: typeFilter }
+    )
+    const displayLogs = usageLogs || []
 
     // Create mutation
     const createMutation = useMutation<UsageLog, typeof formData & { userId?: string }>(
@@ -239,15 +243,6 @@ export default function UsageLogsPage() {
             setDeleteId(null)
         }
     }
-
-    const usageLogs = data?.usageLogs || []
-
-    const filteredLogs = usageLogs.filter((log) => {
-        const matchesSearch = log.usageItem.toLowerCase().includes(search.toLowerCase()) ||
-            (log.user?.fullName?.toLowerCase().includes(search.toLowerCase()) ?? false)
-        const matchesType = typeFilter === "all" || log.itemType === typeFilter
-        return matchesSearch && matchesType
-    })
 
     // Loading state
     if (isLoading) {
@@ -450,7 +445,7 @@ export default function UsageLogsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredLogs.map((log) => (
+                        {displayLogs.map((log) => (
                             <TableRow key={log.id}>
                                 <TableCell>{new Date(log.date).toLocaleDateString("id-ID")}</TableCell>
                                 <TableCell className="font-medium">{log.user?.fullName || "-"}</TableCell>
@@ -480,11 +475,19 @@ export default function UsageLogsPage() {
                 </Table>
             </div>
 
-            {filteredLogs.length === 0 && (
+            {displayLogs.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <ClipboardList className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada log ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
 
             {/* Delete Confirmation Dialog */}

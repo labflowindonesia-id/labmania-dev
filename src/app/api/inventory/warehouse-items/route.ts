@@ -4,11 +4,19 @@ import { warehouseItemService } from '@/lib/services/warehouse-item.service';
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const category = searchParams.get('category') || undefined;
+        const filters = {
+            search: searchParams.get('search') || undefined,
+            category: searchParams.get('category') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
+        };
 
-        const items = await warehouseItemService.getAll(category);
+        const result = await warehouseItemService.getAll(filters);
 
-        return NextResponse.json({ data: items });
+        return NextResponse.json({
+            data: result.data,
+            pagination: result.pagination
+        });
     } catch (error) {
         console.error('Error fetching warehouse items:', error);
         return NextResponse.json(

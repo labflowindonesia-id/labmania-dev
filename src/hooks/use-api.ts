@@ -149,3 +149,131 @@ export interface InstrumentItem {
     assetType: string;
     location: string;
 }
+
+// Paginated fetch hook
+import { PaginationMeta, PaginatedResponse, DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from "@/types/pagination";
+
+interface UseFetchPaginatedOptions {
+    immediate?: boolean;
+    debounceMs?: number;
+}
+
+interface UseFetchPaginatedResult<T> {
+    data: T[];
+    pagination: PaginationMeta;
+    isLoading: boolean;
+    error: string | null;
+    refetch: () => Promise<void>;
+    page: number;
+    setPage: (page: number) => void;
+    search: string;
+    setSearch: (search: string) => void;
+}
+
+export function useFetchPaginated<T>(
+    baseUrl: string,
+    filters: Record<string, string | undefined> = {},
+    options: UseFetchPaginatedOptions = { immediate: true, debounceMs: 300 }
+): UseFetchPaginatedResult<T> {
+    const [data, setData] = useState<T[]>([]);
+    const [pagination, setPagination] = useState<PaginationMeta>({
+        page: DEFAULT_PAGE,
+        limit: DEFAULT_PAGE_SIZE,
+        total: 0,
+        totalPages: 0,
+    });
+    const [isLoading, setIsLoading] = useState(options.immediate ?? true);
+    const [error, setError] = useState<string | null>(null);
+    const [page, setPageState] = useState(DEFAULT_PAGE);
+    const [search, setSearchState] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
+
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+        }, options.debounceMs ?? 300);
+        return () => clearTimeout(timer);
+    }, [search, options.debounceMs]);
+
+    // Reset page to 1 when search changes
+    useEffect(() => {
+        setPageState(DEFAULT_PAGE);
+    }, [debouncedSearch]);
+
+    // Reset page to 1 when filters change
+    const filtersKey = JSON.stringify(filters);
+    useEffect(() => {
+        setPageState(DEFAULT_PAGE);
+    }, [filtersKey]);
+
+    // Build URL with query params
+    const buildUrl = useCallback(() => {
+        const params = new URLSearchParams();
+        params.set("page", page.toString());
+        params.set("limit", DEFAULT_PAGE_SIZE.toString());
+        if (debouncedSearch) {
+            params.set("search", debouncedSearch);
+        }
+        // Add filters
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value && value !== "all") {
+                params.set(key, value);
+            }
+        });
+        return `${baseUrl}?${params.toString()}`;
+    }, [baseUrl, page, debouncedSearch, filtersKey]);
+
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const url = buildUrl();
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Gagal mengambil data");
+            }
+            const result: PaginatedResponse<T> = await response.json();
+            setData(result.data);
+            setPagination(result.pagination);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+            setData([]);
+            setPagination({
+                page: DEFAULT_PAGE,
+                limit: DEFAULT_PAGE_SIZE,
+                total: 0,
+                totalPages: 0,
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [buildUrl]);
+
+    useEffect(() => {
+        if (options.immediate) {
+            fetchData();
+        }
+    }, [fetchData, options.immediate]);
+
+    const setPage = useCallback((newPage: number) => {
+        setPageState(newPage);
+    }, []);
+
+    const setSearch = useCallback((newSearch: string) => {
+        setSearchState(newSearch);
+    }, []);
+
+    return {
+        data,
+        pagination,
+        isLoading,
+        error,
+        refetch: fetchData,
+        page,
+        setPage,
+        search,
+        setSearch,
+    };
+}

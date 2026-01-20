@@ -35,7 +35,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Plus, Search, TestTubes, Eye, Edit, Trash2, Loader2, RefreshCw, Upload, X } from "lucide-react"
 import { StockStatus } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface Standard {
     id: string
@@ -76,7 +77,6 @@ const initialFormData = {
 
 export default function StandardsPage() {
     const router = useRouter()
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -90,8 +90,12 @@ export default function StandardsPage() {
     const [isUploading, setIsUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Fetch standards from API
-    const { data, isLoading, error, refetch } = useFetch<{ standards: Standard[] }>("/api/inventory/standards")
+    // Fetch standards from API with pagination
+    const { data: standards, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Standard>(
+        "/api/inventory/standards",
+        { status: statusFilter }
+    )
+    const displayStandards = standards || []
 
     // Create mutation
     const createMutation = useMutation<Standard, typeof formData>(
@@ -231,15 +235,6 @@ export default function StandardsPage() {
             console.error(err)
         }
     }
-
-    const standards = data?.standards || []
-
-    const filteredStandards = standards.filter((standard) => {
-        const matchesSearch = standard.standardName.toLowerCase().includes(search.toLowerCase()) ||
-            (standard.casNumber?.includes(search) ?? false)
-        const matchesStatus = statusFilter === "all" || standard.status === statusFilter
-        return matchesSearch && matchesStatus
-    })
 
     // Form fields JSX - inlined to prevent focus loss on re-render
     const formFieldsContent = (
@@ -542,7 +537,7 @@ export default function StandardsPage() {
 
             {/* Cards Grid */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredStandards.map((standard) => (
+                {displayStandards.map((standard) => (
                     <Card
                         key={standard.id}
                         className="overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-primary/50 hover:-translate-y-1"
@@ -589,11 +584,19 @@ export default function StandardsPage() {
                 ))}
             </div>
 
-            {filteredStandards.length === 0 && (
+            {displayStandards.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <TestTubes className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada standard stock ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
         </div>
     )

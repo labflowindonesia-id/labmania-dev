@@ -21,11 +21,32 @@ export interface CreateWarehouseChemicalInput {
     status?: 'tersedia' | 'sedang_digunakan' | 'habis';
 }
 
+export interface WarehouseChemicalFilters {
+    search?: string;
+    status?: string;
+    catalogType?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedWarehouseChemicalsResult {
+    data: WarehouseChemicalWithUser[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
 class WarehouseChemicalService {
     /**
-     * Get all warehouse chemicals with optional status filter
+     * Get all warehouse chemicals with optional status filter (paginated)
      */
-    async getAll(status?: string): Promise<WarehouseChemicalWithUser[]> {
+    async getAll(filters?: WarehouseChemicalFilters): Promise<PaginatedWarehouseChemicalsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const chemicals = await db.query.warehouseChemicals.findMany({
             orderBy: desc(schema.warehouseChemicals.createdAt),
             with: {
@@ -33,12 +54,36 @@ class WarehouseChemicalService {
             },
         });
 
-        let filtered = chemicals;
-        if (status && status !== 'all') {
-            filtered = chemicals.filter(c => c.status === status);
+        let filtered = chemicals as WarehouseChemicalWithUser[];
+
+        if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            filtered = filtered.filter(c => c.name.toLowerCase().includes(searchLower));
         }
 
-        return filtered as WarehouseChemicalWithUser[];
+        if (filters?.status && filters.status !== 'all') {
+            filtered = filtered.filter(c => c.status === filters.status);
+        }
+
+        if (filters?.catalogType && filters.catalogType !== 'all') {
+            filtered = filtered.filter(c => c.catalogType === filters.catalogType);
+        }
+
+        // Calculate pagination
+        const total = filtered.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedChemicals = filtered.slice(offset, offset + limit);
+
+        return {
+            data: paginatedChemicals,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

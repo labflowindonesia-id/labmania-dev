@@ -10,7 +10,7 @@ async function checkAdminRole() {
     return true;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
         const isAdmin = await checkAdminRole();
         if (!isAdmin) {
@@ -20,8 +20,16 @@ export async function GET() {
             );
         }
 
-        const users = await userService.getAll();
-        return NextResponse.json({ users });
+        const { searchParams } = new URL(request.url);
+        const filters = {
+            search: searchParams.get('search') || undefined,
+            role: searchParams.get('role') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
+        };
+
+        const result = await userService.getAll(filters);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Get users API error:', error);
         return NextResponse.json(

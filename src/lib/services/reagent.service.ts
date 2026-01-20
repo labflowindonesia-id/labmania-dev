@@ -12,13 +12,28 @@ export interface ReagentFilters {
     search?: string;
     status?: string;
     location?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedReagentsResult {
+    data: ReagentWithStock[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
 }
 
 class ReagentService {
     /**
-     * Get all reagents with calculated stock
+     * Get all reagents with calculated stock (paginated)
      */
-    async getAll(filters?: ReagentFilters): Promise<ReagentWithStock[]> {
+    async getAll(filters?: ReagentFilters): Promise<PaginatedReagentsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         // Get all reagent catalogs
         let query = db.select().from(schema.reagentCatalog);
 
@@ -92,7 +107,21 @@ class ReagentService {
             filteredReagents = filteredReagents.filter(r => r.storageLocation === filters.location);
         }
 
-        return filteredReagents;
+        // Calculate pagination
+        const total = filteredReagents.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedReagents = filteredReagents.slice(offset, offset + limit);
+
+        return {
+            data: paginatedReagents,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

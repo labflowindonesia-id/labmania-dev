@@ -8,6 +8,24 @@ export interface InstrumentWithDetails extends Instrument {
     photoUrl?: string | null; // Frontend compatibility alias for photo
 }
 
+export interface InstrumentFilters {
+    search?: string;
+    status?: string;
+    type?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedInstrumentsResult {
+    data: InstrumentWithDetails[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
 class InstrumentService {
     /**
      * Calculate days until calibration due
@@ -31,9 +49,12 @@ class InstrumentService {
     }
 
     /**
-     * Get all instruments
+     * Get all instruments (paginated)
      */
-    async getAll(filters?: { status?: string; type?: string }): Promise<InstrumentWithDetails[]> {
+    async getAll(filters?: InstrumentFilters): Promise<PaginatedInstrumentsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const instruments = await db.query.instruments.findMany({
             orderBy: desc(schema.instruments.createdAt),
             with: {
@@ -45,9 +66,19 @@ class InstrumentService {
             ...inst,
             photoUrl: inst.photo, // Map for frontend compatibility
             daysUntilDue: this.calculateDaysUntilDue(inst.nextCalibrationDate),
-        }));
+        })) as InstrumentWithDetails[];
 
-        // Apply filters
+        // Apply search filter
+        if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            result = result.filter(
+                i => i.name.toLowerCase().includes(searchLower) ||
+                    i.brand?.toLowerCase().includes(searchLower) ||
+                    i.model?.toLowerCase().includes(searchLower)
+            );
+        }
+
+        // Apply status filter
         if (filters?.status && filters.status !== 'all') {
             result = result.filter(i => i.status === filters.status);
         }
@@ -55,7 +86,21 @@ class InstrumentService {
             result = result.filter(i => i.assetType === filters.type);
         }
 
-        return result as InstrumentWithDetails[];
+        // Calculate pagination
+        const total = result.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedResult = result.slice(offset, offset + limit);
+
+        return {
+            data: paginatedResult,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

@@ -40,7 +40,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ItemCategory } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface WarehouseItem {
     id: string
@@ -76,7 +77,6 @@ const receivedByOptions = [
 ]
 
 export default function WarehouseItemsPage() {
-    const [search, setSearch] = useState("")
     const [categoryFilter, setCategoryFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
@@ -99,9 +99,10 @@ export default function WarehouseItemsPage() {
     useEffect(() => {
         const fetchCatalogs = async () => {
             try {
-                const response = await fetch("/api/inventory/items")
+                const response = await fetch("/api/inventory/items?limit=100")
                 const data = await response.json()
-                const items = (data.items || []).map((i: { id: string; name: string; category: string }) => ({
+                // API returns { data: [...], pagination: {...} } after pagination update
+                const items = (data.data || data.items || []).map((i: { id: string; name: string; category: string }) => ({
                     id: i.id,
                     name: i.name,
                     category: i.category,
@@ -114,8 +115,12 @@ export default function WarehouseItemsPage() {
         fetchCatalogs()
     }, [])
 
-    // Fetch warehouse items from API
-    const { data: items, isLoading, error, refetch } = useFetch<WarehouseItem[]>("/api/inventory/warehouse-items")
+    // Fetch warehouse items from API with pagination
+    const { data: items, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseItem>(
+        "/api/inventory/warehouse-items",
+        { category: categoryFilter }
+    )
+    const displayItems = items || []
 
     // Create mutation
     const createItem = useMutation<WarehouseItem, object>(
@@ -179,13 +184,6 @@ export default function WarehouseItemsPage() {
             setDeleteId(null)
         }
     }
-
-    const filteredItems = (items || []).filter((item) => {
-        const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
-            (item.lotNo && item.lotNo.toLowerCase().includes(search.toLowerCase()))
-        const matchesCategory = categoryFilter === "all" || item.category === categoryFilter
-        return matchesSearch && matchesCategory
-    })
 
     // Loading state
     if (isLoading) {
@@ -268,7 +266,7 @@ export default function WarehouseItemsPage() {
                                                 </SelectItem>
                                             ))}
                                             {filteredCatalogItems.length === 0 && (
-                                                <SelectItem value="" disabled>Tidak ada item</SelectItem>
+                                                <SelectItem value="__empty__" disabled>Tidak ada item</SelectItem>
                                             )}
                                         </SelectContent>
                                     </Select>
@@ -406,7 +404,7 @@ export default function WarehouseItemsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredItems.map((item) => (
+                        {displayItems.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell className="font-medium">{item.name}</TableCell>
                                 <TableCell>
@@ -439,13 +437,21 @@ export default function WarehouseItemsPage() {
             </div>
 
             {
-                filteredItems.length === 0 && (
+                displayItems.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                         <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
                         <p className="text-muted-foreground">Tidak ada item ditemukan</p>
                     </div>
                 )
             }
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

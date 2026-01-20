@@ -41,7 +41,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, FileText, Pencil, Trash2, Download, Loader2, RefreshCw, Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useFetch, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface CalibrationLog {
     id: string
@@ -62,7 +63,6 @@ interface InstrumentOption {
 }
 
 export default function CalibrationLogsPage() {
-    const [search, setSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -91,11 +91,16 @@ export default function CalibrationLogsPage() {
     const [isUploading, setIsUploading] = useState(false)
     const [isEditUploading, setIsEditUploading] = useState(false)
 
-    // Fetch calibration logs from API
-    const { data, isLoading, error, refetch } = useFetch<{ logs: CalibrationLog[] }>("/api/instruments/calibration")
+    // Fetch calibration logs from API with pagination
+    const { data: logs, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<CalibrationLog>(
+        "/api/instruments/calibration",
+        { assetType: typeFilter }
+    )
+    const displayLogs = logs || []
 
     // Fetch instruments for dropdown
-    const { data: instrumentsData } = useFetch<{ instruments: InstrumentOption[] }>("/api/instruments")
+    const { data: instrumentsData } = useFetch<{ data: InstrumentOption[], pagination: { total: number } }>("/api/instruments")
+    const instruments = instrumentsData?.data || []
 
     // Create mutation
     const createMutation = useMutation<CalibrationLog, typeof formData>(
@@ -177,16 +182,6 @@ export default function CalibrationLogsPage() {
     const handleDeleteConfirm = async () => {
         await deleteMutation.mutate(undefined)
     }
-
-    const logs = data?.logs || []
-    const instruments = instrumentsData?.instruments || []
-
-    const filteredLogs = logs.filter((log) => {
-        const matchesSearch = log.instrumentName.toLowerCase().includes(search.toLowerCase()) ||
-            (log.calibratorName?.toLowerCase().includes(search.toLowerCase()) ?? false)
-        const matchesType = typeFilter === "all" || log.assetType === typeFilter
-        return matchesSearch && matchesType
-    })
 
     // Loading state
     if (isLoading) {
@@ -395,7 +390,7 @@ export default function CalibrationLogsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredLogs.map((log) => (
+                        {displayLogs.map((log) => (
                             <TableRow key={log.id}>
                                 <TableCell>{new Date(log.performedDate).toLocaleDateString("id-ID")}</TableCell>
                                 <TableCell className="font-medium">{log.instrumentName}</TableCell>
@@ -433,11 +428,19 @@ export default function CalibrationLogsPage() {
                 </Table>
             </div>
 
-            {filteredLogs.length === 0 && (
+            {displayLogs.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada log kalibrasi ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
 
             {/* Edit Dialog */}

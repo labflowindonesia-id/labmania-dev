@@ -26,11 +26,30 @@ export interface StockCheckResult {
     status: 'available' | 'insufficient' | 'not_found';
 }
 
+export interface TrainingFilters {
+    search?: string;
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedTrainingsResult {
+    data: TrainingSetWithItems[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
+
 class TrainingService {
     /**
-     * Get all training sets with items
+     * Get all training sets with items (paginated)
      */
-    async getAll(): Promise<TrainingSetWithItems[]> {
+    async getAll(filters?: TrainingFilters): Promise<PaginatedTrainingsResult> {
+        const page = filters?.page || 1;
+        const limit = filters?.limit || 10;
+
         const trainingSets = await db.query.trainingSets.findMany({
             orderBy: desc(schema.trainingSets.createdAt),
             with: {
@@ -38,7 +57,30 @@ class TrainingService {
             },
         });
 
-        return trainingSets as TrainingSetWithItems[];
+        let filtered = trainingSets as TrainingSetWithItems[];
+
+        if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            filtered = filtered.filter(ts =>
+                ts.trainingName.toLowerCase().includes(searchLower)
+            );
+        }
+
+        // Calculate pagination
+        const total = filtered.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedTrainings = filtered.slice(offset, offset + limit);
+
+        return {
+            data: paginatedTrainings,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        };
     }
 
     /**

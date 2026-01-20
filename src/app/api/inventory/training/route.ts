@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { trainingService } from '@/lib/services';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const trainingSets = await trainingService.getAll();
-        return NextResponse.json({ trainingSets });
+        const { searchParams } = new URL(request.url);
+        const filters = {
+            search: searchParams.get('search') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
+        };
+
+        const result = await trainingService.getAll(filters);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Training GET error:', error);
         return NextResponse.json(

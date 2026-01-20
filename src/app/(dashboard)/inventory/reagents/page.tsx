@@ -33,8 +33,10 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, FlaskConical, Eye, Edit, Trash2, Loader2, Upload, X } from "lucide-react"
+import { Plus, Search, FlaskConical, Eye, Edit, Trash2, Loader2, Upload, X, RefreshCw } from "lucide-react"
 import { StockStatus } from "@/types"
+import { useFetchPaginated } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 const statusConfig: Record<StockStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     available: { label: "Tersedia", variant: "default" },
@@ -69,14 +71,10 @@ const initialFormData = {
 
 export default function ReagentsPage() {
     const router = useRouter()
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-    const [reagents, setReagents] = useState<Reagent[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [editingReagent, setEditingReagent] = useState<Reagent | null>(null)
     const [deletingReagent, setDeletingReagent] = useState<Reagent | null>(null)
 
@@ -87,23 +85,12 @@ export default function ReagentsPage() {
     const [isUploading, setIsUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    useEffect(() => {
-        fetchReagents()
-    }, [])
-
-    const fetchReagents = async () => {
-        setIsLoading(true)
-        try {
-            const response = await fetch("/api/inventory/reagents")
-            if (!response.ok) throw new Error("Gagal mengambil data")
-            const data = await response.json()
-            setReagents(data.reagents || [])
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Terjadi kesalahan")
-        } finally {
-            setIsLoading(false)
-        }
-    }
+    // Fetch reagents from API with pagination
+    const { data: reagents, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Reagent>(
+        "/api/inventory/reagents",
+        { status: statusFilter }
+    )
+    const displayReagents = reagents || []
 
     const resetForm = () => {
         setFormData(initialFormData)
@@ -169,7 +156,7 @@ export default function ReagentsPage() {
             if (!response.ok) throw new Error("Gagal menambah reagen")
             setIsAddDialogOpen(false)
             resetForm()
-            fetchReagents()
+            refetch()
         } catch (err) {
             console.error(err)
         } finally {
@@ -209,7 +196,7 @@ export default function ReagentsPage() {
             setIsEditDialogOpen(false)
             setEditingReagent(null)
             resetForm()
-            fetchReagents()
+            refetch()
         } catch (err) {
             console.error(err)
         } finally {
@@ -234,20 +221,13 @@ export default function ReagentsPage() {
             if (!response.ok) throw new Error("Gagal menghapus reagen")
             setIsDeleteDialogOpen(false)
             setDeletingReagent(null)
-            fetchReagents()
+            refetch()
         } catch (err) {
             console.error(err)
         } finally {
             setIsSubmitting(false)
         }
     }
-
-    const filteredReagents = reagents.filter((reagent) => {
-        const matchesSearch = reagent.reagentName.toLowerCase().includes(search.toLowerCase()) ||
-            (reagent.casNumber?.includes(search) ?? false)
-        const matchesStatus = statusFilter === "all" || reagent.status === statusFilter
-        return matchesSearch && matchesStatus
-    })
 
     // Form fields JSX - inlined to prevent focus loss on re-render
     const formFieldsContent = (
@@ -394,7 +374,7 @@ export default function ReagentsPage() {
         return (
             <div className="flex flex-col items-center justify-center py-12 text-center">
                 <p className="text-destructive mb-4">{error}</p>
-                <Button onClick={fetchReagents}>Coba Lagi</Button>
+                <Button onClick={refetch}>Coba Lagi</Button>
             </div>
         )
     }
@@ -537,7 +517,7 @@ export default function ReagentsPage() {
 
             {/* Cards Grid */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredReagents.map((reagent) => (
+                {displayReagents.map((reagent) => (
                     <Card
                         key={reagent.id}
                         className="overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-primary/50 hover:-translate-y-1"
@@ -581,11 +561,19 @@ export default function ReagentsPage() {
                 ))}
             </div>
 
-            {filteredReagents.length === 0 && (
+            {displayReagents.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <FlaskConical className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada reagen ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
         </div>
     )

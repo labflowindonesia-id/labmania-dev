@@ -3,8 +3,15 @@ import { db, schema } from '@/lib/db';
 import { desc } from 'drizzle-orm';
 import { createClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const { searchParams } = new URL(request.url);
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '10');
+        const search = searchParams.get('search') || '';
+        const status = searchParams.get('status') || '';
+        const maintenanceType = searchParams.get('maintenanceType') || '';
+
         const logs = await db.query.maintenanceLogs.findMany({
             orderBy: desc(schema.maintenanceLogs.maintenanceDate),
             with: {
@@ -14,14 +21,44 @@ export async function GET() {
         });
 
         // Transform to include instrument name and performer name
-        const logsWithDetails = logs.map(log => ({
+        let logsWithDetails = logs.map(log => ({
             ...log,
             instrumentName: log.instrument?.name || 'Unknown',
             instrumentLocation: log.instrument?.location || 'Unknown',
             performedByName: log.performedByUser?.fullName || 'Unknown',
         }));
 
-        return NextResponse.json({ logs: logsWithDetails });
+        // Apply filters
+        if (search) {
+            const searchLower = search.toLowerCase();
+            logsWithDetails = logsWithDetails.filter(log =>
+                log.instrumentName.toLowerCase().includes(searchLower)
+            );
+        }
+
+        if (status && status !== 'all') {
+            logsWithDetails = logsWithDetails.filter(log => log.status === status);
+        }
+
+        if (maintenanceType && maintenanceType !== 'all') {
+            logsWithDetails = logsWithDetails.filter(log => log.maintenanceType === maintenanceType);
+        }
+
+        // Calculate pagination
+        const total = logsWithDetails.length;
+        const totalPages = Math.ceil(total / limit);
+        const offset = (page - 1) * limit;
+        const paginatedLogs = logsWithDetails.slice(offset, offset + limit);
+
+        return NextResponse.json({
+            data: paginatedLogs,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        });
     } catch (error) {
         console.error('Get maintenance logs API error:', error);
         return NextResponse.json(

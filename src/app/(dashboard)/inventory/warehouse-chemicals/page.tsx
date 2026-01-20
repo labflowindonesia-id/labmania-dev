@@ -41,7 +41,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { WarehouseItemStatus } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface WarehouseChemical {
     id: string
@@ -81,7 +82,6 @@ const receivedByOptions = [
 ]
 
 export default function WarehouseChemicalsPage() {
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -130,8 +130,12 @@ export default function WarehouseChemicalsPage() {
         fetchCatalogs()
     }, [])
 
-    // Fetch warehouse chemicals from API
-    const { data: chemicals, isLoading, error, refetch } = useFetch<WarehouseChemical[]>("/api/inventory/warehouse-chemicals")
+    // Fetch warehouse chemicals from API with pagination
+    const { data: chemicals, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseChemical>(
+        "/api/inventory/warehouse-chemicals",
+        { status: statusFilter, catalogType: typeFilter }
+    )
+    const displayItems = chemicals || []
 
     // Create mutation
     const createChemical = useMutation<WarehouseChemical, object>(
@@ -197,13 +201,6 @@ export default function WarehouseChemicalsPage() {
             setDeleteId(null)
         }
     }
-
-    const filteredItems = (chemicals || []).filter((item) => {
-        const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase())
-        const matchesStatus = statusFilter === "all" || item.status === statusFilter
-        const matchesType = typeFilter === "all" || item.catalogType === typeFilter
-        return matchesSearch && matchesStatus && matchesType
-    })
 
     // Loading state
     if (isLoading) {
@@ -429,7 +426,7 @@ export default function WarehouseChemicalsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredItems.map((item) => (
+                        {displayItems.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell className="font-medium">{item.name}</TableCell>
                                 <TableCell>
@@ -476,13 +473,21 @@ export default function WarehouseChemicalsPage() {
             </div>
 
             {
-                filteredItems.length === 0 && (
+                displayItems.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                         <Warehouse className="h-12 w-12 text-muted-foreground/50 mb-4" />
                         <p className="text-muted-foreground">Tidak ada item ditemukan</p>
                     </div>
                 )
             }
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
+            )}
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

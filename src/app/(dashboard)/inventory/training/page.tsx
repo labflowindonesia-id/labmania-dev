@@ -41,8 +41,9 @@ import {
 } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { GraduationCap, Play, Users, CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Plus, Trash2 } from "lucide-react"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { GraduationCap, Play, Users, CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Plus, Trash2, Search } from "lucide-react"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface TrainingSetItem {
     id: string
@@ -89,8 +90,12 @@ export default function TrainingPage() {
     const [warehouseOptions, setWarehouseOptions] = useState<Record<string, { id: string; name: string; unit: string }[]>>({})
     const [loadingOptions, setLoadingOptions] = useState<Record<string, boolean>>({})
 
-    // Fetch training sets from API
-    const { data, isLoading, error, refetch } = useFetch<{ trainingSets: TrainingSet[] }>("/api/inventory/training")
+    // Fetch training sets from API with pagination
+    const { data: trainingSets, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<TrainingSet>(
+        "/api/inventory/training",
+        {}
+    )
+    const displayTrainingSets = trainingSets || []
 
     // Create training set mutation
     const createTraining = useMutation<TrainingSet, { trainingName: string; participantsPerSet: number; items: typeof newItems }>(
@@ -182,8 +187,6 @@ export default function TrainingPage() {
         }
     }
 
-    const trainingSets = data?.trainingSets || []
-
     const handleCheckStock = async () => {
         if (!selectedTraining || !participants) return
 
@@ -200,7 +203,7 @@ export default function TrainingPage() {
                 setCheckResults(data.stockCheck || [])
             } else {
                 // Fallback to mock if API fails
-                const training = trainingSets.find(t => t.id === selectedTraining)
+                const training = displayTrainingSets.find(t => t.id === selectedTraining)
                 if (training) {
                     const numParticipants = parseInt(participants)
                     const sets = Math.ceil(numParticipants / training.participantsPerSet)
@@ -452,7 +455,7 @@ export default function TrainingPage() {
                                     <SelectValue placeholder="Pilih training" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {trainingSets.map(t => (
+                                    {displayTrainingSets.map(t => (
                                         <SelectItem key={t.id} value={t.id}>
                                             {t.trainingName}
                                         </SelectItem>
@@ -496,14 +499,14 @@ export default function TrainingPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {trainingSets.length === 0 ? (
+                    {displayTrainingSets.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
                             <GraduationCap className="h-12 w-12 text-muted-foreground/50 mb-4" />
                             <p className="text-muted-foreground">Belum ada training set</p>
                         </div>
                     ) : (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {trainingSets.map((training) => {
+                            {displayTrainingSets.map((training) => {
                                 const { equipment, consumables, reagents } = groupItemsByType(training.items)
                                 return (
                                     <Card
@@ -569,13 +572,21 @@ export default function TrainingPage() {
                 </CardContent>
             </Card>
 
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
+            )}
+
             {/* Stock Check Dialog */}
             <Dialog open={isCheckDialogOpen} onOpenChange={setIsCheckDialogOpen}>
                 <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Hasil Pengecekan Stok</DialogTitle>
                         <DialogDescription>
-                            Training: {trainingSets.find(t => t.id === selectedTraining)?.trainingName} |
+                            Training: {displayTrainingSets.find(t => t.id === selectedTraining)?.trainingName} |
                             Peserta: {participants} orang
                         </DialogDescription>
                     </DialogHeader>

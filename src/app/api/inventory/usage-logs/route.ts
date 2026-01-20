@@ -11,10 +11,12 @@ export async function GET(request: NextRequest) {
             itemType: searchParams.get('itemType') || undefined,
             startDate: searchParams.get('startDate') || undefined,
             endDate: searchParams.get('endDate') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
         };
 
-        const usageLogs = await usageLogService.getAll(filters);
-        return NextResponse.json({ usageLogs });
+        const result = await usageLogService.getAll(filters);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Usage logs GET error:', error);
         return NextResponse.json(

@@ -8,10 +8,12 @@ export async function GET(request: NextRequest) {
             search: searchParams.get('search') || undefined,
             status: searchParams.get('status') || undefined,
             location: searchParams.get('location') || undefined,
+            page: parseInt(searchParams.get('page') || '1'),
+            limit: parseInt(searchParams.get('limit') || '10'),
         };
 
-        const standards = await standardService.getAll(filters);
-        return NextResponse.json({ standards });
+        const result = await standardService.getAll(filters);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Standards GET error:', error);
         return NextResponse.json(

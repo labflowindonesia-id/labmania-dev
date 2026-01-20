@@ -42,7 +42,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { OrderStatus } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface OrderItem {
     id: string
@@ -75,7 +76,6 @@ const statusConfig: Record<OrderStatus, { label: string; variant: "default" | "s
 }
 
 export default function OrdersPage() {
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [newOrderItems, setNewOrderItems] = useState("")
@@ -94,8 +94,11 @@ export default function OrdersPage() {
         setExpandedOrders(newExpanded)
     }
 
-    // Fetch orders from API
-    const { data: orders, isLoading, error, refetch } = useFetch<Order[]>("/api/inventory/orders")
+    // Fetch orders from API with pagination
+    const { data: displayOrders, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Order>(
+        "/api/inventory/orders",
+        { status: statusFilter }
+    )
 
     // Mutations
     const createOrder = useMutation<Order, { items: { itemName: string; quantity: number }[]; notes?: string }>(
@@ -167,14 +170,6 @@ export default function OrdersPage() {
             setDeleteId(null)
         }
     }
-
-    const filteredOrders = (orders || []).filter((order) => {
-        const orderedByName = order.orderedByUser?.fullName || ""
-        const matchesSearch = order.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-            orderedByName.toLowerCase().includes(search.toLowerCase())
-        const matchesStatus = statusFilter === "all" || order.status === statusFilter
-        return matchesSearch && matchesStatus
-    })
 
     // Loading state
     if (isLoading) {
@@ -304,7 +299,7 @@ export default function OrdersPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredOrders.map((order) => (
+                        {displayOrders.map((order) => (
                             <TableRow key={order.id}>
                                 <TableCell className="font-medium">{order.orderNumber}</TableCell>
                                 <TableCell>{new Date(order.orderDate).toLocaleDateString("id-ID")}</TableCell>
@@ -382,11 +377,19 @@ export default function OrdersPage() {
                 </Table>
             </div>
 
-            {filteredOrders.length === 0 && (
+            {displayOrders.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada pesanan ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
 
             {/* Delete Confirmation Dialog */}

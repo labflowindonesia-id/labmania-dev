@@ -32,7 +32,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Plus, Search, Package, Eye, Edit, Trash2, Loader2, RefreshCw } from "lucide-react"
 import { StockStatus, ItemCategory } from "@/types"
-import { useFetch, useMutation } from "@/hooks/use-api"
+import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { Pagination } from "@/components/ui/pagination"
 
 interface Item {
     id: string
@@ -60,7 +61,6 @@ const categoryConfig: Record<ItemCategory, { label: string; color: string }> = {
 
 export default function ItemsPage() {
     const router = useRouter()
-    const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [categoryFilter, setCategoryFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -87,8 +87,11 @@ export default function ItemsPage() {
         location: "",
     })
 
-    // Fetch items from API
-    const { data, isLoading, error, refetch } = useFetch<{ items: Item[] }>("/api/inventory/items")
+    // Fetch items from API with pagination
+    const { data: items, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Item>(
+        "/api/inventory/items",
+        { status: statusFilter, category: categoryFilter }
+    )
 
     // Create mutation
     const createMutation = useMutation<Item, typeof formData>(
@@ -155,15 +158,8 @@ export default function ItemsPage() {
         }
     }
 
-    const items = data?.items || []
-
-    const filteredItems = items.filter((item) => {
-        const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
-            (item.brand?.toLowerCase().includes(search.toLowerCase()) ?? false)
-        const matchesStatus = statusFilter === "all" || item.status === statusFilter
-        const matchesCategory = categoryFilter === "all" || item.category === categoryFilter
-        return matchesSearch && matchesStatus && matchesCategory
-    })
+    // Items are already filtered by the API
+    const displayItems = items || []
 
     // Loading state
     if (isLoading) {
@@ -353,7 +349,7 @@ export default function ItemsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredItems.map((item) => (
+                        {displayItems.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell className="font-medium">{item.name}</TableCell>
                                 <TableCell>{item.brand || "-"}</TableCell>
@@ -396,11 +392,19 @@ export default function ItemsPage() {
                 </Table>
             </div>
 
-            {filteredItems.length === 0 && (
+            {displayItems.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">Tidak ada item ditemukan</p>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <Pagination
+                    pagination={pagination}
+                    onPageChange={setPage}
+                />
             )}
 
             {/* Edit Dialog */}
