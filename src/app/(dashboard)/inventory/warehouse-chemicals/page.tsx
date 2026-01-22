@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -42,7 +42,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { WarehouseItemStatus } from "@/types"
 import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { useCatalogItems } from "@/hooks/use-catalog-items"
 import { Pagination } from "@/components/ui/pagination"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 interface WarehouseChemical {
     id: string
@@ -65,7 +67,7 @@ interface WarehouseChemical {
 interface CatalogItem {
     id: string
     name: string
-    type: 'reagent' | 'standard'
+    category: 'reagent' | 'standard'
 }
 
 const statusConfig: Record<WarehouseItemStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -85,7 +87,6 @@ export default function WarehouseChemicalsPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [typeFilter, setTypeFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
     const [deleteId, setDeleteId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
@@ -100,35 +101,38 @@ export default function WarehouseChemicalsPage() {
         receivedBy: "",
     })
 
-    // Fetch catalogs on mount
-    useEffect(() => {
-        const fetchCatalogs = async () => {
-            try {
-                // Fetch reagents
-                const reagentRes = await fetch("/api/inventory/reagents")
-                const reagentData = await reagentRes.json()
-                const reagents = (reagentData.reagents || []).map((r: { id: string; reagentName: string }) => ({
+    // Fetch catalogs with caching - reagents and standards
+    const { items: reagentCatalog, isLoading: isLoadingReagents } = useCatalogItems(
+        "/api/inventory/reagents",
+        {
+            transform: (data: unknown) => {
+                const d = data as { data?: Array<{ id: string; reagentName: string }> }
+                return (d.data || []).map(r => ({
                     id: r.id,
                     name: r.reagentName,
-                    type: 'reagent' as const,
+                    category: 'reagent',
                 }))
-
-                // Fetch standards
-                const standardRes = await fetch("/api/inventory/standards")
-                const standardData = await standardRes.json()
-                const standards = (standardData.standards || []).map((s: { id: string; standardName: string }) => ({
-                    id: s.id,
-                    name: s.standardName,
-                    type: 'standard' as const,
-                }))
-
-                setCatalogItems([...reagents, ...standards])
-            } catch (error) {
-                console.error("Error fetching catalogs:", error)
             }
         }
-        fetchCatalogs()
-    }, [])
+    )
+
+    const { items: standardCatalog, isLoading: isLoadingStandards } = useCatalogItems(
+        "/api/inventory/standards",
+        {
+            transform: (data: unknown) => {
+                const d = data as { data?: Array<{ id: string; standardName: string }> }
+                return (d.data || []).map(s => ({
+                    id: s.id,
+                    name: s.standardName,
+                    category: 'standard',
+                }))
+            }
+        }
+    )
+
+    // Combine catalogs
+    const catalogItems = [...reagentCatalog, ...standardCatalog]
+    const isLoadingCatalog = isLoadingReagents || isLoadingStandards
 
     // Fetch warehouse chemicals from API with pagination
     const { data: chemicals, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseChemical>(
@@ -157,16 +161,21 @@ export default function WarehouseChemicalsPage() {
             setFormData({
                 ...formData,
                 catalogId: selected.id,
-                catalogType: selected.type,
+                catalogType: selected.category,
                 name: selected.name,
             })
         }
     }
 
-    // Filter catalog items by type
-    const filteredCatalogItems = formData.catalogType
-        ? catalogItems.filter(c => c.type === formData.catalogType)
+    // Filter catalog items by type and convert to SearchableSelect options
+    const catalogSelectOptions = (formData.catalogType
+        ? catalogItems.filter(c => c.category === formData.catalogType)
         : catalogItems
+    ).map(item => ({
+        value: item.id,
+        label: item.name,
+        category: item.category,
+    }))
 
     const handleSubmit = async () => {
         if (!formData.catalogId || !formData.amount || !formData.expDate) {
@@ -268,28 +277,15 @@ export default function WarehouseChemicalsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="catalogItem">Pilih Item Katalog</Label>
-                                    <Select
+                                    <SearchableSelect
+                                        options={catalogSelectOptions}
                                         value={formData.catalogId}
                                         onValueChange={handleCatalogSelect}
+                                        placeholder={formData.catalogType ? "Pilih atau cari item..." : "Pilih tipe dulu"}
+                                        searchPlaceholder="Ketik untuk mencari..."
                                         disabled={!formData.catalogType}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={formData.catalogType ? "Pilih item" : "Pilih tipe dulu"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {filteredCatalogItems.length === 0 ? (
-                                                <div className="py-6 text-center text-sm text-muted-foreground">
-                                                    Tidak ada item
-                                                </div>
-                                            ) : (
-                                                filteredCatalogItems.map((item) => (
-                                                    <SelectItem key={item.id} value={item.id}>
-                                                        {item.name}
-                                                    </SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                        isLoading={isLoadingCatalog}
+                                    />
                                 </div>
                             </div>
                             {formData.name && (

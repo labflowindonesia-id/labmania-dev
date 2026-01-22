@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useFetchPaginated, useMutation } from "@/hooks/use-api"
 import { Pagination } from "@/components/ui/pagination"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { useAuth } from "@/components/providers/auth-provider"
 
 interface UsageLog {
@@ -114,8 +115,8 @@ export default function UsageLogsPage() {
     const fetchWarehouseData = async () => {
         setIsLoadingWarehouse(true)
         try {
-            // Fetch warehouse chemicals (reagent & standard)
-            const chemicalsRes = await fetch("/api/inventory/warehouse-chemicals")
+            // Fetch warehouse chemicals (reagent & standard) - all items
+            const chemicalsRes = await fetch("/api/inventory/warehouse-chemicals?limit=all")
             const chemicalsData = await chemicalsRes.json()
             if (chemicalsData.data) {
                 // Filter by stock availability (remainingAmount > 0 and status tersedia)
@@ -125,8 +126,8 @@ export default function UsageLogsPage() {
                 setWarehouseChemicals(availableChemicals)
             }
 
-            // Fetch warehouse items (consumable)
-            const itemsRes = await fetch("/api/inventory/warehouse-items?category=consumable")
+            // Fetch warehouse items (consumable) - all items
+            const itemsRes = await fetch("/api/inventory/warehouse-items?category=consumable&limit=all")
             const itemsData = await itemsRes.json()
             if (itemsData.data) {
                 // Filter by stock availability (currentQuantity > 0)
@@ -142,17 +143,37 @@ export default function UsageLogsPage() {
         }
     }
 
-    // Get filtered items based on selected type
-    const getFilteredWarehouseItems = () => {
+    // Get filtered items based on selected type and convert to SearchableSelect options
+    const getFilteredWarehouseOptions = () => {
         if (formData.itemType === "reagent") {
-            return warehouseChemicals.filter(c => c.catalogType === "reagent")
+            return warehouseChemicals
+                .filter(c => c.catalogType === "reagent")
+                .map(c => ({
+                    value: c.id,
+                    label: `${c.name} (${c.remainingAmount} ${c.sizeUnit})`,
+                    category: c.catalogType,
+                }))
         } else if (formData.itemType === "standard") {
-            return warehouseChemicals.filter(c => c.catalogType === "standard")
+            return warehouseChemicals
+                .filter(c => c.catalogType === "standard")
+                .map(c => ({
+                    value: c.id,
+                    label: `${c.name} (${c.remainingAmount} ${c.sizeUnit})`,
+                    category: c.catalogType,
+                }))
         } else if (formData.itemType === "consumable") {
-            return warehouseItems.filter(i => i.category === "consumable")
+            return warehouseItems
+                .filter(i => i.category === "consumable")
+                .map(i => ({
+                    value: i.id,
+                    label: `${i.name} (${i.currentQuantity} ${i.unit})`,
+                    category: i.category,
+                }))
         }
         return []
     }
+
+    const warehouseSelectOptions = getFilteredWarehouseOptions()
 
     // Handle item selection
     const handleItemSelect = (itemId: string) => {
@@ -267,7 +288,6 @@ export default function UsageLogsPage() {
         )
     }
 
-    const filteredWarehouseItems = getFilteredWarehouseItems()
 
     return (
         <div className="space-y-6">
@@ -323,39 +343,21 @@ export default function UsageLogsPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="usageItem">Nama Item *</Label>
-                                <Select
+                                <SearchableSelect
+                                    options={warehouseSelectOptions}
                                     value={formData.warehouseItemId}
                                     onValueChange={handleItemSelect}
-                                    disabled={!formData.itemType || isLoadingWarehouse}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={
-                                            isLoadingWarehouse
-                                                ? "Memuat data..."
-                                                : !formData.itemType
-                                                    ? "Pilih tipe item terlebih dahulu"
-                                                    : "Pilih item dari gudang"
-                                        } />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {filteredWarehouseItems.length === 0 ? (
-                                            <div className="py-6 text-center text-sm text-muted-foreground">
-                                                Tidak ada item tersedia
-                                            </div>
-                                        ) : (
-                                            filteredWarehouseItems.map((item) => (
-                                                <SelectItem key={item.id} value={item.id}>
-                                                    {item.name} {formData.itemType !== "consumable" && (
-                                                        <>({(item as WarehouseChemical).remainingAmount} {(item as WarehouseChemical).sizeUnit})</>
-                                                    )}
-                                                    {formData.itemType === "consumable" && (
-                                                        <>({(item as WarehouseItem).currentQuantity} {(item as WarehouseItem).unit})</>
-                                                    )}
-                                                </SelectItem>
-                                            ))
-                                        )}
-                                    </SelectContent>
-                                </Select>
+                                    placeholder={
+                                        isLoadingWarehouse
+                                            ? "Memuat data..."
+                                            : !formData.itemType
+                                                ? "Pilih tipe item terlebih dahulu"
+                                                : "Pilih atau cari item..."
+                                    }
+                                    searchPlaceholder="Ketik untuk mencari..."
+                                    disabled={!formData.itemType}
+                                    isLoading={isLoadingWarehouse}
+                                />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">

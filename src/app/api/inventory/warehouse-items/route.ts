@@ -4,11 +4,13 @@ import { warehouseItemService } from '@/lib/services/warehouse-item.service';
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
+        const limitParam = searchParams.get('limit');
+
         const filters = {
             search: searchParams.get('search') || undefined,
             category: searchParams.get('category') || undefined,
             page: parseInt(searchParams.get('page') || '1'),
-            limit: parseInt(searchParams.get('limit') || '10'),
+            limit: limitParam === 'all' ? 99999 : parseInt(limitParam || '10'),
         };
 
         const result = await warehouseItemService.getAll(filters);

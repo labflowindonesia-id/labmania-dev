@@ -113,9 +113,8 @@ export default function MaintenancePage() {
     )
     const displayLogs = logs || []
 
-    // Fetch instruments for dropdown
-    const { data: instrumentsData } = useFetch<{ data: InstrumentOption[], pagination: { total: number } }>("/api/instruments")
-    const instruments = instrumentsData?.data || []
+    // Fetch instruments for dropdown (all instruments)
+    const { data: instruments = [], isLoading: isLoadingInstruments } = useFetch<InstrumentOption[]>("/api/instruments?limit=all")
 
     // Create mutation
     const createMutation = useMutation<MaintenanceLog, typeof formData>(
@@ -258,16 +257,23 @@ export default function MaintenancePage() {
                                     <Select
                                         value={formData.instrumentId}
                                         onValueChange={(value) => setFormData(prev => ({ ...prev, instrumentId: value }))}
+                                        disabled={isLoadingInstruments}
                                     >
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Pilih instrumen" />
+                                            <SelectValue placeholder={isLoadingInstruments ? "Memuat..." : "Pilih instrumen"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {instruments.map((inst) => (
-                                                <SelectItem key={inst.id} value={inst.id}>
-                                                    {inst.name}
+                                            {(instruments ?? []).length === 0 ? (
+                                                <SelectItem value="__empty__" disabled>
+                                                    {isLoadingInstruments ? "Memuat data..." : "Tidak ada instrumen"}
                                                 </SelectItem>
-                                            ))}
+                                            ) : (
+                                                (instruments ?? []).map((inst) => (
+                                                    <SelectItem key={inst.id} value={inst.id}>
+                                                        {inst.name}
+                                                    </SelectItem>
+                                                ))
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>

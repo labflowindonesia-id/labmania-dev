@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge"
 import { GraduationCap, Play, Users, CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Plus, Trash2, Search } from "lucide-react"
 import { useFetchPaginated, useMutation } from "@/hooks/use-api"
 import { Pagination } from "@/components/ui/pagination"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 interface TrainingSetItem {
     id: string
@@ -153,13 +154,23 @@ export default function TrainingPage() {
         // If item name changed, auto-fill unit from warehouse options
         if (field === "itemName" && updated[index].itemType) {
             const options = warehouseOptions[updated[index].itemType] || []
-            const selectedItem = options.find(opt => opt.name === value)
+            const selectedItem = options.find(opt => opt.id === value || opt.name === value)
             if (selectedItem) {
+                updated[index].itemName = selectedItem.name
                 updated[index].unit = selectedItem.unit
             }
         }
 
         setNewItems(updated)
+    }
+
+    // Convert warehouse options to SearchableSelect format
+    const getWarehouseSelectOptions = (type: string) => {
+        const options = warehouseOptions[type] || []
+        return options.map(opt => ({
+            value: opt.name,
+            label: opt.name,
+        }))
     }
 
     const handleCreateTraining = async () => {
@@ -368,28 +379,16 @@ export default function TrainingPage() {
                                                         <SelectItem value="consumable">Consumable</SelectItem>
                                                     </SelectContent>
                                                 </Select>
-                                                <Select
+                                                <SearchableSelect
+                                                    options={getWarehouseSelectOptions(item.itemType)}
                                                     value={item.itemName}
                                                     onValueChange={(value) => handleUpdateItem(idx, "itemName", value)}
-                                                    disabled={!item.itemType || loadingOptions[item.itemType]}
-                                                >
-                                                    <SelectTrigger className="flex-1">
-                                                        <SelectValue placeholder={loadingOptions[item.itemType] ? "Loading..." : "Pilih item"} />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {(warehouseOptions[item.itemType] || []).length === 0 ? (
-                                                            <SelectItem value="__empty__" disabled>
-                                                                {item.itemType ? "Tidak ada item" : "Pilih tipe dulu"}
-                                                            </SelectItem>
-                                                        ) : (
-                                                            (warehouseOptions[item.itemType] || []).map((opt) => (
-                                                                <SelectItem key={opt.id} value={opt.name}>
-                                                                    {opt.name}
-                                                                </SelectItem>
-                                                            ))
-                                                        )}
-                                                    </SelectContent>
-                                                </Select>
+                                                    placeholder={loadingOptions[item.itemType] ? "Loading..." : "Pilih atau cari item..."}
+                                                    searchPlaceholder="Ketik untuk mencari..."
+                                                    disabled={!item.itemType}
+                                                    isLoading={loadingOptions[item.itemType]}
+                                                    className="flex-1"
+                                                />
                                                 <Input
                                                     type="number"
                                                     placeholder="Qty"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,7 +41,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ItemCategory } from "@/types"
 import { useFetchPaginated, useMutation } from "@/hooks/use-api"
+import { useCatalogItems } from "@/hooks/use-catalog-items"
 import { Pagination } from "@/components/ui/pagination"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 interface WarehouseItem {
     id: string
@@ -79,7 +81,6 @@ const receivedByOptions = [
 export default function WarehouseItemsPage() {
     const [categoryFilter, setCategoryFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
     const [deleteId, setDeleteId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
 
@@ -95,25 +96,20 @@ export default function WarehouseItemsPage() {
         receivedBy: "",
     })
 
-    // Fetch catalogs on mount
-    useEffect(() => {
-        const fetchCatalogs = async () => {
-            try {
-                const response = await fetch("/api/inventory/items?limit=100")
-                const data = await response.json()
-                // API returns { data: [...], pagination: {...} } after pagination update
-                const items = (data.data || data.items || []).map((i: { id: string; name: string; category: string }) => ({
+    // Fetch catalogs with caching
+    const { items: catalogItems, isLoading: isLoadingCatalog } = useCatalogItems(
+        "/api/inventory/items",
+        {
+            transform: (data: unknown) => {
+                const d = data as { data?: Array<{ id: string; name: string; category: string }> }
+                return (d.data || []).map(i => ({
                     id: i.id,
                     name: i.name,
                     category: i.category,
                 }))
-                setCatalogItems(items)
-            } catch (error) {
-                console.error("Error fetching catalogs:", error)
             }
         }
-        fetchCatalogs()
-    }, [])
+    )
 
     // Fetch warehouse items from API with pagination
     const { data: items, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseItem>(
@@ -148,10 +144,15 @@ export default function WarehouseItemsPage() {
         }
     }
 
-    // Filter catalog items by category
-    const filteredCatalogItems = formData.category
+    // Filter catalog items by category and convert to SearchableSelect options
+    const catalogSelectOptions = (formData.category
         ? catalogItems.filter(c => c.category === formData.category)
         : catalogItems
+    ).map(item => ({
+        value: item.id,
+        label: item.name,
+        category: item.category,
+    }))
 
     const handleSubmit = async () => {
         if (!formData.catalogId || !formData.quantity) {
@@ -251,25 +252,15 @@ export default function WarehouseItemsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="catalogItem">Pilih Item Katalog</Label>
-                                    <Select
+                                    <SearchableSelect
+                                        options={catalogSelectOptions}
                                         value={formData.catalogId}
                                         onValueChange={handleCatalogSelect}
+                                        placeholder={formData.category ? "Pilih atau cari item..." : "Pilih kategori dulu"}
+                                        searchPlaceholder="Ketik untuk mencari..."
                                         disabled={!formData.category}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={formData.category ? "Pilih item" : "Pilih kategori dulu"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {filteredCatalogItems.map((item) => (
-                                                <SelectItem key={item.id} value={item.id}>
-                                                    {item.name}
-                                                </SelectItem>
-                                            ))}
-                                            {filteredCatalogItems.length === 0 && (
-                                                <SelectItem value="__empty__" disabled>Tidak ada item</SelectItem>
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                        isLoading={isLoadingCatalog}
+                                    />
                                 </div>
                             </div>
                             {formData.name && (

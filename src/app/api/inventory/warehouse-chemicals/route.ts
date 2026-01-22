@@ -4,12 +4,14 @@ import { warehouseChemicalService } from '@/lib/services/warehouse-chemical.serv
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
+        const limitParam = searchParams.get('limit');
+
         const filters = {
             search: searchParams.get('search') || undefined,
             status: searchParams.get('status') || undefined,
             catalogType: searchParams.get('catalogType') || undefined,
             page: parseInt(searchParams.get('page') || '1'),
-            limit: parseInt(searchParams.get('limit') || '10'),
+            limit: limitParam === 'all' ? 99999 : parseInt(limitParam || '10'),
         };
 
         const result = await warehouseChemicalService.getAll(filters);

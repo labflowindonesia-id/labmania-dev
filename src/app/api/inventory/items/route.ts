@@ -4,12 +4,15 @@ import { itemService } from '@/lib/services';
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
+        const limitParam = searchParams.get('limit');
+
+        // Support limit=all to fetch all items (for dropdowns)
         const filters = {
             search: searchParams.get('search') || undefined,
             category: searchParams.get('category') || undefined,
             status: searchParams.get('status') || undefined,
             page: parseInt(searchParams.get('page') || '1'),
-            limit: parseInt(searchParams.get('limit') || '10'),
+            limit: limitParam === 'all' ? 99999 : parseInt(limitParam || '10'),
         };
 
         const result = await itemService.getAll(filters);
