@@ -46,3 +46,50 @@ export async function DELETE(
         );
     }
 }
+
+export async function PUT(
+    request: NextRequest,
+    context: RouteContext
+) {
+    try {
+        const { id } = await context.params;
+        const body = await request.json();
+
+        // Calculate unitCostBase if totalPrice and sizeValue are provided
+        let unitCostBase = body.unitCostBase;
+        if (body.totalPrice && body.sizeValue) {
+            const totalPrice = parseFloat(body.totalPrice);
+            const sizeValue = parseFloat(body.sizeValue);
+            if (sizeValue > 0) {
+                unitCostBase = totalPrice / sizeValue;
+            }
+        }
+
+        const chemical = await warehouseChemicalService.update(id, {
+            sizeValue: body.sizeValue,
+            sizeUnit: body.sizeUnit,
+            remainingAmount: body.remainingAmount,
+            unit: body.unit,
+            expiredDate: body.expiredDate,
+            receivedBy: body.receivedBy,
+            receivedByName: body.receivedByName,
+            totalPrice: body.totalPrice ? String(body.totalPrice) : undefined,
+            unitCostBase: unitCostBase ? String(unitCostBase) : undefined,
+        });
+
+        if (!chemical) {
+            return NextResponse.json(
+                { error: 'Item tidak ditemukan' },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({ data: chemical });
+    } catch (error) {
+        console.error('Update warehouse chemical error:', error);
+        return NextResponse.json(
+            { error: 'Gagal memperbarui item' },
+            { status: 500 }
+        );
+    }
+}

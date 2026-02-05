@@ -1,6 +1,6 @@
 import { db, schema } from '@/lib/db';
-import { eq, desc, and, like } from 'drizzle-orm';
-import type { Order, NewOrder, OrderItem, NewOrderItem } from '@/lib/db/schema/inventory';
+import { eq, desc, like } from 'drizzle-orm';
+import type { Order, OrderItem } from '@/lib/db/schema/inventory';
 
 export interface OrderWithItems extends Order {
     items: OrderItem[];

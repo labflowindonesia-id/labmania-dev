@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -72,6 +73,7 @@ const initialFormData = {
 export default function ReagentsPage() {
     const router = useRouter()
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [sortBy, setSortBy] = useState<'fefo' | 'name' | 'stock'>("fefo")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -83,26 +85,35 @@ export default function ReagentsPage() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [photoPreview, setPhotoPreview] = useState<string | null>(null)
     const [isUploading, setIsUploading] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Fetch reagents from API with pagination
-    const { data: reagents, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Reagent>(
+    const { data: reagents, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<Reagent>(
         "/api/inventory/reagents",
-        { status: statusFilter }
+        { status: statusFilter, sortBy }
     )
     const displayReagents = reagents || []
 
-    const resetForm = () => {
+    const resetForm = useCallback(() => {
         setFormData(initialFormData)
         setPhotoPreview(null)
         if (fileInputRef.current) {
             fileInputRef.current.value = ""
         }
-    }
+    }, [])
 
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+        if (file.size > maxSize) {
+            toast.error("Ukuran file terlalu besar. Maksimal: 5MB")
+            e.target.value = ""
+            return
+        }
 
         // Preview
         const reader = new FileReader()
@@ -123,25 +134,97 @@ export default function ReagentsPage() {
                 body: formDataUpload,
             })
 
-            if (!response.ok) throw new Error("Upload gagal")
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || "Upload gagal")
+            }
             const { publicUrl } = await response.json()
             setFormData((prev) => ({ ...prev, productPhoto: publicUrl }))
+            toast.success("Foto berhasil diupload")
         } catch (err) {
             console.error("Upload error:", err)
+            toast.error(err instanceof Error ? err.message : "Gagal mengupload foto")
+            setPhotoPreview(null)
         } finally {
             setIsUploading(false)
         }
     }
 
-    const clearPhoto = () => {
+    const clearPhoto = useCallback(() => {
         setPhotoPreview(null)
         setFormData((prev) => ({ ...prev, productPhoto: "" }))
         if (fileInputRef.current) {
             fileInputRef.current.value = ""
         }
+    }, [])
+
+    // Handle drag-drop file upload
+    const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+
+        const file = e.dataTransfer.files?.[0]
+        if (!file) return
+
+        // Check if it's an image
+        if (!file.type.startsWith('image/')) {
+            toast.error("File harus berupa gambar")
+            return
+        }
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024
+        if (file.size > maxSize) {
+            toast.error("Ukuran file terlalu besar. Maksimal: 5MB")
+            return
+        }
+
+        // Preview
+        const reader = new FileReader()
+        reader.onloadend = () => {
+            setPhotoPreview(reader.result as string)
+        }
+        reader.readAsDataURL(file)
+
+        // Upload to Supabase
+        setIsUploading(true)
+        try {
+            const formDataUpload = new FormData()
+            formDataUpload.append("file", file)
+            formDataUpload.append("bucket", "images")
+
+            const response = await fetch("/api/upload", {
+                method: "POST",
+                body: formDataUpload,
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || "Upload gagal")
+            }
+            const { publicUrl } = await response.json()
+            setFormData((prev) => ({ ...prev, productPhoto: publicUrl }))
+            toast.success("Foto berhasil diupload")
+        } catch (err) {
+            console.error("Upload error:", err)
+            toast.error(err instanceof Error ? err.message : "Gagal mengupload foto")
+            setPhotoPreview(null)
+        } finally {
+            setIsUploading(false)
+        }
     }
 
-    const handleAddReagent = async () => {
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+    }
+
+    const handleAddReagent = useCallback(async () => {
         if (!formData.reagentName || !formData.storageLocation || !formData.form) {
             return
         }
@@ -162,9 +245,9 @@ export default function ReagentsPage() {
         } finally {
             setIsSubmitting(false)
         }
-    }
+    }, [formData, resetForm, refetch])
 
-    const handleEdit = (e: React.MouseEvent, reagent: Reagent) => {
+    const handleEdit = useCallback((e: React.MouseEvent, reagent: Reagent) => {
         e.stopPropagation()
         setEditingReagent(reagent)
         setFormData({
@@ -178,9 +261,9 @@ export default function ReagentsPage() {
         })
         setPhotoPreview(reagent.productPhoto || null)
         setIsEditDialogOpen(true)
-    }
+    }, [])
 
-    const handleUpdate = async () => {
+    const handleUpdate = useCallback(async () => {
         if (!editingReagent || !formData.reagentName || !formData.storageLocation || !formData.form) {
             return
         }
@@ -202,15 +285,15 @@ export default function ReagentsPage() {
         } finally {
             setIsSubmitting(false)
         }
-    }
+    }, [editingReagent, formData, resetForm, refetch])
 
-    const handleDeleteClick = (e: React.MouseEvent, reagent: Reagent) => {
+    const handleDeleteClick = useCallback((e: React.MouseEvent, reagent: Reagent) => {
         e.stopPropagation()
         setDeletingReagent(reagent)
         setIsDeleteDialogOpen(true)
-    }
+    }, [])
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!deletingReagent) return
 
         setIsSubmitting(true)
@@ -227,7 +310,7 @@ export default function ReagentsPage() {
         } finally {
             setIsSubmitting(false)
         }
-    }
+    }, [deletingReagent, refetch])
 
     // Form fields JSX - inlined to prevent focus loss on re-render
     const formFieldsContent = (
@@ -325,7 +408,13 @@ export default function ReagentsPage() {
                             </Button>
                         </div>
                     ) : (
-                        <div className="w-24 h-24 rounded-lg border-2 border-dashed flex items-center justify-center bg-muted">
+                        <div
+                            className={`w-24 h-24 rounded-lg border-2 border-dashed flex items-center justify-center bg-muted cursor-pointer transition-colors ${isDragging ? 'border-primary bg-primary/10' : ''}`}
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
                             <FlaskConical className="h-8 w-8 text-muted-foreground/50" />
                         </div>
                     )}
@@ -503,7 +592,7 @@ export default function ReagentsPage() {
                         <SelectItem value="expired">Expired</SelectItem>
                     </SelectContent>
                 </Select>
-                <Select defaultValue="fefo">
+                <Select value={sortBy} onValueChange={(val) => setSortBy(val as 'fefo' | 'name' | 'stock')}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Urutkan" />
                     </SelectTrigger>

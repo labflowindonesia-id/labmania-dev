@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -78,6 +79,7 @@ const initialFormData = {
 export default function StandardsPage() {
     const router = useRouter()
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [sortBy, setSortBy] = useState<'fefo' | 'name' | 'stock'>("fefo")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -91,9 +93,9 @@ export default function StandardsPage() {
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Fetch standards from API with pagination
-    const { data: standards, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Standard>(
+    const { data: standards, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<Standard>(
         "/api/inventory/standards",
-        { status: statusFilter }
+        { status: statusFilter, sortBy }
     )
     const displayStandards = standards || []
 
@@ -121,17 +123,25 @@ export default function StandardsPage() {
         }
     )
 
-    const resetForm = () => {
+    const resetForm = useCallback(() => {
         setFormData(initialFormData)
         setPhotoPreview(null)
         if (fileInputRef.current) {
             fileInputRef.current.value = ""
         }
-    }
+    }, [])
 
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+        if (file.size > maxSize) {
+            toast.error("Ukuran file terlalu besar. Maksimal: 5MB")
+            e.target.value = ""
+            return
+        }
 
         // Preview
         const reader = new FileReader()
@@ -152,32 +162,38 @@ export default function StandardsPage() {
                 body: formDataUpload,
             })
 
-            if (!response.ok) throw new Error("Upload gagal")
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || "Upload gagal")
+            }
             const { publicUrl } = await response.json()
             setFormData((prev) => ({ ...prev, productPhoto: publicUrl }))
+            toast.success("Foto berhasil diupload")
         } catch (err) {
             console.error("Upload error:", err)
+            toast.error(err instanceof Error ? err.message : "Gagal mengupload foto")
+            setPhotoPreview(null)
         } finally {
             setIsUploading(false)
         }
     }
 
-    const clearPhoto = () => {
+    const clearPhoto = useCallback(() => {
         setPhotoPreview(null)
         setFormData((prev) => ({ ...prev, productPhoto: "" }))
         if (fileInputRef.current) {
             fileInputRef.current.value = ""
         }
-    }
+    }, [])
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
         if (!formData.standardName || !formData.form || !formData.storageLocation) {
             return
         }
         await createMutation.mutate(formData)
-    }
+    }, [formData, createMutation])
 
-    const handleEdit = (e: React.MouseEvent, standard: Standard) => {
+    const handleEdit = useCallback((e: React.MouseEvent, standard: Standard) => {
         e.stopPropagation()
         setEditingStandard(standard)
         setFormData({
@@ -194,9 +210,9 @@ export default function StandardsPage() {
         })
         setPhotoPreview(standard.productPhoto || null)
         setIsEditDialogOpen(true)
-    }
+    }, [])
 
-    const handleUpdate = async () => {
+    const handleUpdate = useCallback(async () => {
         if (!editingStandard || !formData.standardName || !formData.form || !formData.storageLocation) {
             return
         }
@@ -215,15 +231,15 @@ export default function StandardsPage() {
         } catch (err) {
             console.error(err)
         }
-    }
+    }, [editingStandard, formData, resetForm, refetch])
 
-    const handleDeleteClick = (e: React.MouseEvent, standard: Standard) => {
+    const handleDeleteClick = useCallback((e: React.MouseEvent, standard: Standard) => {
         e.stopPropagation()
         setDeletingStandard(standard)
         setIsDeleteDialogOpen(true)
-    }
+    }, [])
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!deletingStandard) return
 
         try {
@@ -234,7 +250,7 @@ export default function StandardsPage() {
         } catch (err) {
             console.error(err)
         }
-    }
+    }, [deletingStandard, refetch])
 
     // Form fields JSX - inlined to prevent focus loss on re-render
     const formFieldsContent = (
@@ -531,6 +547,16 @@ export default function StandardsPage() {
                         <SelectItem value="low_stock">Stok Menipis</SelectItem>
                         <SelectItem value="out_of_stock">Habis</SelectItem>
                         <SelectItem value="expired">Expired</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={(val) => setSortBy(val as 'fefo' | 'name' | 'stock')}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Urutkan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="fefo">FEFO (Exp Terdekat)</SelectItem>
+                        <SelectItem value="name">Nama A-Z</SelectItem>
+                        <SelectItem value="stock">Stok Terendah</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

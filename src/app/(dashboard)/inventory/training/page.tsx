@@ -92,7 +92,7 @@ export default function TrainingPage() {
     const [loadingOptions, setLoadingOptions] = useState<Record<string, boolean>>({})
 
     // Fetch training sets from API with pagination
-    const { data: trainingSets, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<TrainingSet>(
+    const { data: trainingSets, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<TrainingSet>(
         "/api/inventory/training",
         {}
     )
@@ -272,10 +272,11 @@ export default function TrainingPage() {
 
     // Group items by type for display
     const groupItemsByType = (items: TrainingSetItem[]) => {
-        const equipment = items.filter(i => i.itemType === "equipment")
+        const equipment = items.filter(i => i.itemType === "equipment" || i.itemType === "barang")
         const consumables = items.filter(i => i.itemType === "consumable")
-        const reagents = items.filter(i => i.itemType === "reagent_standard")
-        return { equipment, consumables, reagents }
+        const reagents = items.filter(i => i.itemType === "reagent" || i.itemType === "standard" || i.itemType === "reagent_standard")
+        const samples = items.filter(i => i.itemType === "sample")
+        return { equipment, consumables, reagents, samples }
     }
 
     // Loading state
@@ -375,6 +376,7 @@ export default function TrainingPage() {
                                                     <SelectContent>
                                                         <SelectItem value="reagent">Reagen</SelectItem>
                                                         <SelectItem value="standard">Standard</SelectItem>
+                                                        <SelectItem value="sample">Sample</SelectItem>
                                                         <SelectItem value="barang">Barang</SelectItem>
                                                         <SelectItem value="consumable">Consumable</SelectItem>
                                                     </SelectContent>
@@ -506,7 +508,7 @@ export default function TrainingPage() {
                     ) : (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {displayTrainingSets.map((training) => {
-                                const { equipment, consumables, reagents } = groupItemsByType(training.items)
+                                const { equipment, consumables, reagents, samples } = groupItemsByType(training.items)
                                 return (
                                     <Card
                                         key={training.id}
@@ -542,6 +544,14 @@ export default function TrainingPage() {
                                                     <p className="font-medium text-muted-foreground">Reagen/Standard:</p>
                                                     {reagents.map((r, i) => (
                                                         <p key={i}>• {r.itemName} ({r.quantity} {r.unit})</p>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {samples.length > 0 && (
+                                                <div>
+                                                    <p className="font-medium text-muted-foreground">Sample:</p>
+                                                    {samples.map((s, i) => (
+                                                        <p key={i}>• {s.itemName} ({s.quantity} {s.unit})</p>
                                                     ))}
                                                 </div>
                                             )}
@@ -607,8 +617,9 @@ export default function TrainingPage() {
                                         <TableCell className="font-medium">{result.item}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline">
-                                                {result.type === "equipment" ? "Barang" :
-                                                    result.type === "consumable" ? "Consumable" : "Reagen"}
+                                                {result.type === "equipment" || result.type === "barang" ? "Barang" :
+                                                    result.type === "consumable" ? "Consumable" :
+                                                        result.type === "sample" ? "Sample" : "Reagen"}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">

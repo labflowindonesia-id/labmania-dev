@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
         let items: { id: string; name: string; unit: string }[] = [];
 
-        if (type === 'reagent' || type === 'standard') {
+        if (type === 'reagent' || type === 'standard' || type === 'sample') {
             // Get from warehouse_chemicals based on catalogType
             const chemicals = await db.query.warehouseChemicals.findMany();
             items = chemicals
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
                 }));
         } else {
             return NextResponse.json(
-                { error: 'Tipe tidak valid. Gunakan: reagent, standard, barang, consumable' },
+                { error: 'Tipe tidak valid. Gunakan: reagent, standard, sample, barang, consumable' },
                 { status: 400 }
             );
         }

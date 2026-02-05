@@ -54,6 +54,22 @@ export interface StandardStockCatalog {
     orderStatus?: string
 }
 
+// Sample Catalog (QC Samples)
+export interface SampleCatalog {
+    id: string
+    sampleName: string
+    matrix: string | null
+    storageLocation: StorageLocation
+    form: ItemForm
+    photo?: string | null
+    minimumStockLevel: number
+    currentStock?: number
+    status?: StockStatus
+    nearestExpDate?: Date | null
+    createdAt?: Date
+    updatedAt?: Date
+}
+
 // Items & Consumable Catalog
 export interface ItemsCatalog {
     id: string
@@ -70,11 +86,11 @@ export interface ItemsCatalog {
     currentQuantity: number
 }
 
-// Warehouse - Chemicals (Reagents & Standards)
+// Warehouse - Chemicals (Reagents, Standards & Samples)
 export interface WarehouseChemical {
     id: string
     catalogId: string
-    catalogType: "reagent" | "standard"
+    catalogType: "reagent" | "standard" | "sample"
     name: string
     receivedDate: Date
     remainingAmount: number

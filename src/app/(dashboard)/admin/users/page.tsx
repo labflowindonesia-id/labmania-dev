@@ -40,7 +40,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, Users, Edit, Trash2, Loader2, RefreshCw, Shield } from "lucide-react"
+import { Plus, Search, Users, Trash2, Loader2, RefreshCw, Shield } from "lucide-react"
 import { useFetchPaginated, useMutation } from "@/hooks/use-api"
 import { Pagination } from "@/components/ui/pagination"
 
@@ -64,7 +64,7 @@ const roleConfig: Record<UserRole, { label: string; variant: "default" | "second
 export default function AdminUsersPage() {
     const [roleFilter, setRoleFilter] = useState<string>("all")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    // Edit dialog removed per user request
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
@@ -76,15 +76,10 @@ export default function AdminUsersPage() {
         role: "analyst" as UserRole,
     })
 
-    // Form state for edit
-    const [editForm, setEditForm] = useState({
-        username: "",
-        fullName: "",
-        role: "analyst" as UserRole,
-    })
+    // Edit form state removed per user request
 
     // Fetch users from API with pagination
-    const { data: users, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<User>(
+    const { data: users, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<User>(
         "/api/admin/users",
         { role: roleFilter }
     )
@@ -103,18 +98,7 @@ export default function AdminUsersPage() {
         }
     )
 
-    // Update mutation
-    const updateMutation = useMutation<User, typeof editForm>(
-        `/api/admin/users/${selectedUser?.id}`,
-        "PUT",
-        {
-            onSuccess: () => {
-                setIsEditDialogOpen(false)
-                setSelectedUser(null)
-                refetch()
-            }
-        }
-    )
+    // Update mutation removed per user request
 
     // Delete mutation
     const deleteMutation = useMutation<{ success: boolean }, never>(
@@ -134,20 +118,9 @@ export default function AdminUsersPage() {
         await createMutation.mutate(createForm)
     }
 
-    const handleEdit = (user: User) => {
-        setSelectedUser(user)
-        setEditForm({
-            username: user.username,
-            fullName: user.fullName,
-            role: user.role,
-        })
-        setIsEditDialogOpen(true)
-    }
+    // handleEdit removed per user request
 
-    const handleUpdate = async () => {
-        if (!editForm.fullName) return
-        await updateMutation.mutate(editForm)
-    }
+    // handleUpdate removed per user request
 
     const handleDelete = (user: User) => {
         setSelectedUser(user)
@@ -317,7 +290,7 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Search */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -327,6 +300,7 @@ export default function AdminUsersPage() {
                         className="pl-9"
                     />
                 </div>
+                {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             </div>
 
             {/* Users Table */}
@@ -371,13 +345,6 @@ export default function AdminUsersPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => handleEdit(user)}
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
                                                     onClick={() => handleDelete(user)}
                                                     className="text-destructive hover:text-destructive"
                                                 >
@@ -401,63 +368,7 @@ export default function AdminUsersPage() {
                 />
             )}
 
-            {/* Edit Dialog */}
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit User</DialogTitle>
-                        <DialogDescription>
-                            Ubah informasi pengguna
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-username">Username</Label>
-                            <Input
-                                id="edit-username"
-                                value={editForm.username}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-fullName">Nama Lengkap *</Label>
-                            <Input
-                                id="edit-fullName"
-                                value={editForm.fullName}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, fullName: e.target.value }))}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-role">Role *</Label>
-                            <Select
-                                value={editForm.role}
-                                onValueChange={(value: UserRole) => setEditForm(prev => ({ ...prev, role: value }))}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih role" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                    <SelectItem value="manager">Manager</SelectItem>
-                                    <SelectItem value="analyst">Analyst</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        {updateMutation.error && (
-                            <p className="text-sm text-destructive">{updateMutation.error}</p>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                            Batal
-                        </Button>
-                        <Button onClick={handleUpdate} disabled={updateMutation.isLoading}>
-                            {updateMutation.isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            Simpan
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {/* Edit Dialog removed per user request */}
 
             {/* Delete Confirmation */}
             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

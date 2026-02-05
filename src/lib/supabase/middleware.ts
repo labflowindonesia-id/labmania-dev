@@ -27,28 +27,45 @@ export async function updateSession(request: NextRequest) {
         }
     )
 
-    // Refreshing the auth token
-    const {
-        data: { user },
-    } = await supabase.auth.getUser()
-
     // Define public routes that don't require authentication
     const publicRoutes = ['/login']
     const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))
 
-    // If user is not authenticated and trying to access protected route, redirect to login
-    if (!user && !isPublicRoute) {
+    // Skip auth check for public routes - let them load immediately
+    if (isPublicRoute) {
+        return supabaseResponse
+    }
+
+    // Try to get user with timeout to prevent hanging
+    let user = null
+    try {
+        // Create a promise that rejects after timeout
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        })
+
+        // Race between auth check and timeout
+        const authResult = await Promise.race([
+            supabase.auth.getUser(),
+            timeoutPromise
+        ]) as { data: { user: unknown } }
+
+        user = authResult?.data?.user
+    } catch (error) {
+        console.warn('[Middleware] Auth check failed or timed out:', error)
+        // On error, redirect to login for protected routes
         const url = request.nextUrl.clone()
         url.pathname = '/login'
         return NextResponse.redirect(url)
     }
 
-    // If user is authenticated and trying to access login page, redirect to dashboard
-    if (user && request.nextUrl.pathname === '/login') {
+    // If user is not authenticated and trying to access protected route, redirect to login
+    if (!user) {
         const url = request.nextUrl.clone()
-        url.pathname = '/'
+        url.pathname = '/login'
         return NextResponse.redirect(url)
     }
 
     return supabaseResponse
 }
+

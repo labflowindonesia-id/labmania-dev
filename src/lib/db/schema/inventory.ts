@@ -20,6 +20,7 @@ export const reagentCatalog = pgTable('reagent_catalog', {
     storageLocation: storageLocationEnum('storage_location').notNull(),
     form: itemFormEnum('form').notNull(),
     msdsDocument: text('msds_document'), // Storage URL
+    coaDocument: text('coa_document'), // Storage URL - Quick access reference
     productPhoto: text('product_photo'), // Storage URL
     minimumStockLevel: integer('minimum_stock_level').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -38,7 +39,21 @@ export const standardCatalog = pgTable('standard_catalog', {
     form: itemFormEnum('form').notNull(),
     storageLocation: storageLocationEnum('storage_location').notNull(),
     msdsDocument: text('msds_document'),
+    coaDocument: text('coa_document'), // Quick access reference
     photo: text('photo'),
+    minimumStockLevel: integer('minimum_stock_level').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Sample Catalog (QC Samples for training/testing)
+export const sampleCatalog = pgTable('sample_catalog', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sampleName: varchar('sample_name', { length: 255 }).notNull(),
+    matrix: varchar('matrix', { length: 100 }), // e.g., Wine, Water, Oil
+    storageLocation: storageLocationEnum('storage_location').notNull(),
+    form: itemFormEnum('form').notNull(),
+    photo: text('photo'), // Storage URL (bucket: images)
     minimumStockLevel: integer('minimum_stock_level').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -60,7 +75,7 @@ export const itemsCatalog = pgTable('items_catalog', {
 export const warehouseChemicals = pgTable('warehouse_chemicals', {
     id: uuid('id').primaryKey().defaultRandom(),
     catalogId: uuid('catalog_id').notNull(),
-    catalogType: varchar('catalog_type', { length: 20 }).notNull(), // 'reagent' | 'standard'
+    catalogType: varchar('catalog_type', { length: 20 }).notNull(), // 'reagent' | 'standard' | 'sample'
     name: varchar('name', { length: 255 }).notNull(),
     receivedDate: date('received_date').notNull(),
     sizeValue: decimal('size_value', { precision: 10, scale: 2 }).notNull(),
@@ -68,6 +83,9 @@ export const warehouseChemicals = pgTable('warehouse_chemicals', {
     remainingAmount: decimal('remaining_amount', { precision: 10, scale: 2 }).notNull(),
     unit: varchar('unit', { length: 20 }).notNull(),
     expiredDate: date('expired_date').notNull(),
+    // Cost tracking fields
+    totalPrice: decimal('total_price', { precision: 15, scale: 2 }), // Total price per bottle/package
+    unitCostBase: decimal('unit_cost_base', { precision: 15, scale: 4 }), // Price per unit (Rp/mL or Rp/g)
     receivedBy: uuid('received_by').references(() => profiles.id),
     receivedByName: varchar('received_by_name', { length: 100 }), // Text field for GAP/KEP/Manager
     orderDetailId: uuid('order_detail_id'),
@@ -86,6 +104,8 @@ export const warehouseItems = pgTable('warehouse_items', {
     category: itemCategoryEnum('category').notNull(),
     currentQuantity: integer('current_quantity').notNull(),
     unit: stockUnitEnum('unit').notNull(),
+    // Cost tracking field
+    unitCost: decimal('unit_cost', { precision: 15, scale: 2 }), // Price per pcs (normalized)
     receivedDate: date('received_date').notNull(),
     receivedBy: uuid('received_by').references(() => profiles.id),
     receivedByName: varchar('received_by_name', { length: 100 }), // Text field for GAP/KEP/Manager
@@ -127,6 +147,11 @@ export const usageLogs = pgTable('usage_logs', {
     itemType: varchar('item_type', { length: 50 }).notNull(), // 'barang' | 'consumable' | 'reagent' | 'standard'
     quantityUsed: decimal('quantity_used', { precision: 10, scale: 2 }).notNull(),
     unit: varchar('unit', { length: 50 }),
+    // Cost tracking fields
+    unitCost: decimal('unit_cost', { precision: 15, scale: 4 }), // Snapshot price per unit
+    totalCost: decimal('total_cost', { precision: 15, scale: 2 }), // = quantityUsed × unitCost
+    warehouseItemId: uuid('warehouse_item_id'), // FK to warehouse_items or warehouse_chemicals
+    warehouseType: varchar('warehouse_type', { length: 20 }), // 'chemical' | 'item'
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -150,6 +175,60 @@ export const trainingSetItems = pgTable('training_set_items', {
     unit: varchar('unit', { length: 50 }),
 });
 
+// Training Cost Logs - Execution log with idempotency
+export const trainingCostLogs = pgTable('training_cost_logs', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    trainingSetId: uuid('training_set_id').references(() => trainingSets.id, { onDelete: 'set null' }),
+    trainingName: varchar('training_name', { length: 255 }).notNull(),
+    executedAt: timestamp('executed_at').defaultNow().notNull(),
+    executedBy: uuid('executed_by').references(() => profiles.id, { onDelete: 'set null' }),
+    executedByName: varchar('executed_by_name', { length: 100 }),
+    participants: integer('participants').notNull(),
+    setsUsed: integer('sets_used').default(1).notNull(),
+    totalCost: decimal('total_cost', { precision: 15, scale: 2 }).default('0').notNull(),
+    idempotencyKey: varchar('idempotency_key', { length: 64 }).unique(), // Hash to prevent double execution
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Training Cost Log Items - Detail per item with full traceability
+export const trainingCostLogItems = pgTable('training_cost_log_items', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    trainingCostLogId: uuid('training_cost_log_id').references(() => trainingCostLogs.id, { onDelete: 'cascade' }).notNull(),
+    // Item identification
+    itemName: varchar('item_name', { length: 255 }).notNull(),
+    itemType: varchar('item_type', { length: 50 }).notNull(), // 'consumable' | 'reagent' | 'standard' | 'barang'
+    // Traceability - link to source
+    catalogId: uuid('catalog_id'),
+    warehouseItemId: uuid('warehouse_item_id'), // FK to warehouse_items
+    warehouseChemicalId: uuid('warehouse_chemical_id'), // FK to warehouse_chemicals
+    // Quantity & Cost snapshot (immutable)
+    quantity: decimal('quantity', { precision: 10, scale: 2 }).notNull(),
+    unit: varchar('unit', { length: 50 }),
+    unitCost: decimal('unit_cost', { precision: 15, scale: 4 }).notNull(), // Snapshot at execution time
+    totalCost: decimal('total_cost', { precision: 15, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Documents - Centralized document library for MSDS and CoA
+export const documents = pgTable('documents', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Document metadata
+    name: varchar('name', { length: 255 }).notNull(),
+    documentType: varchar('document_type', { length: 20 }).notNull(), // 'msds' | 'coa'
+    fileUrl: text('file_url').notNull(),
+    fileSize: integer('file_size'),
+    mimeType: varchar('mime_type', { length: 100 }).default('application/pdf'),
+    // Catalog reference
+    catalogType: varchar('catalog_type', { length: 20 }).notNull(), // 'reagent' | 'standard'
+    catalogId: uuid('catalog_id').notNull(),
+    // Audit
+    uploadedBy: uuid('uploaded_by').references(() => profiles.id, { onDelete: 'set null' }),
+    uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Relations
 export const ordersRelations = relations(orders, ({ one, many }) => ({
     orderedByUser: one(profiles, { fields: [orders.orderedBy], references: [profiles.id] }),
@@ -163,10 +242,21 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 
 export const trainingSetRelations = relations(trainingSets, ({ many }) => ({
     items: many(trainingSetItems),
+    costLogs: many(trainingCostLogs),
 }));
 
 export const trainingSetItemsRelations = relations(trainingSetItems, ({ one }) => ({
     trainingSet: one(trainingSets, { fields: [trainingSetItems.trainingSetId], references: [trainingSets.id] }),
+}));
+
+export const trainingCostLogsRelations = relations(trainingCostLogs, ({ one, many }) => ({
+    trainingSet: one(trainingSets, { fields: [trainingCostLogs.trainingSetId], references: [trainingSets.id] }),
+    executedByUser: one(profiles, { fields: [trainingCostLogs.executedBy], references: [profiles.id] }),
+    items: many(trainingCostLogItems),
+}));
+
+export const trainingCostLogItemsRelations = relations(trainingCostLogItems, ({ one }) => ({
+    costLog: one(trainingCostLogs, { fields: [trainingCostLogItems.trainingCostLogId], references: [trainingCostLogs.id] }),
 }));
 
 export const usageLogsRelations = relations(usageLogs, ({ one }) => ({
@@ -182,11 +272,17 @@ export const warehouseItemsRelations = relations(warehouseItems, ({ one }) => ({
     receivedByUser: one(profiles, { fields: [warehouseItems.receivedBy], references: [profiles.id] }),
 }));
 
+export const documentsRelations = relations(documents, ({ one }) => ({
+    uploadedByUser: one(profiles, { fields: [documents.uploadedBy], references: [profiles.id] }),
+}));
+
 // Type exports
 export type ReagentCatalog = typeof reagentCatalog.$inferSelect;
 export type NewReagentCatalog = typeof reagentCatalog.$inferInsert;
 export type StandardCatalog = typeof standardCatalog.$inferSelect;
 export type NewStandardCatalog = typeof standardCatalog.$inferInsert;
+export type SampleCatalog = typeof sampleCatalog.$inferSelect;
+export type NewSampleCatalog = typeof sampleCatalog.$inferInsert;
 export type ItemsCatalog = typeof itemsCatalog.$inferSelect;
 export type NewItemsCatalog = typeof itemsCatalog.$inferInsert;
 export type WarehouseChemical = typeof warehouseChemicals.$inferSelect;
@@ -203,3 +299,9 @@ export type TrainingSet = typeof trainingSets.$inferSelect;
 export type NewTrainingSet = typeof trainingSets.$inferInsert;
 export type TrainingSetItem = typeof trainingSetItems.$inferSelect;
 export type NewTrainingSetItem = typeof trainingSetItems.$inferInsert;
+export type TrainingCostLog = typeof trainingCostLogs.$inferSelect;
+export type NewTrainingCostLog = typeof trainingCostLogs.$inferInsert;
+export type TrainingCostLogItem = typeof trainingCostLogItems.$inferSelect;
+export type NewTrainingCostLogItem = typeof trainingCostLogItems.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;

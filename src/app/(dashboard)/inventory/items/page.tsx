@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -88,7 +88,7 @@ export default function ItemsPage() {
     })
 
     // Fetch items from API with pagination
-    const { data: items, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Item>(
+    const { data: items, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<Item>(
         "/api/inventory/items",
         { status: statusFilter, category: categoryFilter }
     )
@@ -126,14 +126,14 @@ export default function ItemsPage() {
         }
     )
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
         if (!formData.name || !formData.category || !formData.stockUnit) {
             return
         }
         await createMutation.mutate(formData)
-    }
+    }, [formData, createMutation])
 
-    const handleEdit = (item: Item) => {
+    const handleEdit = useCallback((item: Item) => {
         setSelectedItem(item)
         setEditForm({
             name: item.name,
@@ -144,19 +144,19 @@ export default function ItemsPage() {
             location: item.location || "",
         })
         setIsEditDialogOpen(true)
-    }
+    }, [])
 
-    const handleUpdate = async () => {
+    const handleUpdate = useCallback(async () => {
         if (!editForm.name) return
         await updateMutation.mutate(editForm)
-    }
+    }, [editForm, updateMutation])
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = useCallback(async (id: string) => {
         if (confirm("Yakin ingin menghapus item ini?")) {
             await fetch(`/api/inventory/items/${id}`, { method: "DELETE" })
             refetch()
         }
-    }
+    }, [refetch])
 
     // Items are already filtered by the API
     const displayItems = items || []

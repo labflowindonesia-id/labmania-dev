@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import useSWR from "swr"
 import dynamic from "next/dynamic"
 import { addDays } from "date-fns"
@@ -8,10 +8,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, Package, Clock, Wrench, TrendingUp } from "lucide-react"
-import { WeeklyCalendar } from "@/components/dashboard/weekly-calendar"
-import { MonthlyCalendar, type ScheduleEvent } from "@/components/dashboard/monthly-calendar"
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton"
 import { useAuth } from "@/components/providers/auth-provider"
+import type { ScheduleEvent } from "@/components/dashboard/monthly-calendar"
+
+// Lazy load calendar components to reduce initial bundle size
+const WeeklyCalendar = dynamic(
+    () => import("@/components/dashboard/weekly-calendar").then(mod => ({ default: mod.WeeklyCalendar })),
+    { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-muted rounded-lg" /> }
+)
+const MonthlyCalendar = dynamic(
+    () => import("@/components/dashboard/monthly-calendar").then(mod => ({ default: mod.MonthlyCalendar })),
+    { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-muted rounded-lg" /> }
+)
+
 
 // Lazy load chart components to reduce initial bundle size
 const InstrumentStatusChart = dynamic(
@@ -167,7 +177,7 @@ export default function DashboardPage() {
     const { user, isLoading: authLoading } = useAuth()
 
     // Use SWR for data fetching with caching and deduplication
-    const { data: dashboardData, isLoading: dataLoading, error } = useSWR<DashboardData>(
+    const { data: dashboardData, isLoading: dataLoading, error, mutate } = useSWR<DashboardData>(
         // Only fetch if user is authenticated
         user ? "/api/dashboard" : null,
         dashboardFetcher,
@@ -188,12 +198,54 @@ export default function DashboardPage() {
         }
     )
 
+    // Background H-30 check on dashboard load
+    // This ensures notifications are created immediately when user opens dashboard
+    useEffect(() => {
+        // Only run if user is authenticated
+        if (!user) return;
+
+        // Check if H-30 check was already done this session (prevent spamming)
+        const sessionKey = 'h30_check_done_' + new Date().toDateString();
+        if (sessionStorage.getItem(sessionKey)) return;
+
+        // Run H-30 check in background
+        const triggerH30Check = async () => {
+            try {
+                console.log('[Dashboard] Triggering background H-30 check...');
+                const response = await fetch('/api/notifications/check-h30', {
+                    method: 'POST',
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('[Dashboard] H-30 check completed:', result);
+
+                    // If new notifications were created, refresh dashboard data
+                    if (result.totalCreated > 0) {
+                        mutate(); // Revalidate SWR data
+                    }
+
+                    // Mark as done for this session/day
+                    sessionStorage.setItem(sessionKey, 'true');
+                }
+            } catch (error) {
+                console.log('[Dashboard] Background H-30 check failed (non-blocking):', error);
+            }
+        };
+
+        // Run after a small delay to not block page load
+        const timeoutId = setTimeout(triggerH30Check, 1000);
+
+        return () => clearTimeout(timeoutId);
+    }, [user, mutate]);
+
     // Show loading skeleton only during initial auth check
     const isLoading = authLoading || (dataLoading && !dashboardData)
 
-    const statsData = [
+    // Memoize stats data to prevent recalculation on every render
+    const statsData = useMemo(() => [
         {
-            title: "Reagen Expired",
+            title: "Bahan Kimia Expired",
             value: dashboardData?.stats.expiredReagents?.toString() || "0",
             description: "dalam 30 hari",
             icon: AlertTriangle,
@@ -224,7 +276,12 @@ export default function DashboardPage() {
             color: "text-blue-500",
             bgColor: "bg-blue-50 dark:bg-blue-950",
         },
-    ]
+    ], [dashboardData?.stats])
+
+    // Memoize event handler to prevent re-creating function on every render
+    const handleEventClick = useCallback((event: ScheduleEvent) => {
+        console.log("Event clicked:", event)
+    }, [])
 
     if (isLoading) {
         return <DashboardSkeleton />
@@ -278,13 +335,13 @@ export default function DashboardPage() {
                         <TabsContent value="weekly">
                             <WeeklyCalendar
                                 events={dashboardData?.scheduleEvents || defaultScheduleEvents}
-                                onEventClick={(event) => console.log("Event clicked:", event)}
+                                onEventClick={handleEventClick}
                             />
                         </TabsContent>
                         <TabsContent value="monthly">
                             <MonthlyCalendar
                                 events={dashboardData?.scheduleEvents || defaultScheduleEvents}
-                                onEventClick={(event) => console.log("Event clicked:", event)}
+                                onEventClick={handleEventClick}
                             />
                         </TabsContent>
                     </Tabs>
@@ -343,7 +400,7 @@ export default function DashboardPage() {
                     <CardHeader>
                         <CardTitle className="text-red-600 dark:text-red-400 flex items-center gap-2">
                             <AlertTriangle className="h-5 w-5" />
-                            Reagen Mendekati Expired
+                            Bahan Kimia Mendekati Expired
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -364,7 +421,7 @@ export default function DashboardPage() {
                                     </div>
                                 ))
                             ) : (
-                                <p className="text-sm text-muted-foreground">Tidak ada reagen mendekati expired</p>
+                                <p className="text-sm text-muted-foreground">Tidak ada bahan kimia mendekati expired</p>
                             )}
                         </div>
                     </CardContent>

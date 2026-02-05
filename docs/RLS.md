@@ -37,12 +37,18 @@ Labmania LIMS uses Supabase Row Level Security (RLS) to enforce data access at t
 CREATE POLICY "Users can view all profiles" ON profiles
   FOR SELECT TO authenticated USING (true);
 
+-- Allow anon to read for login flow (username lookup before auth)
+CREATE POLICY "Allow anon to read profiles for login" ON profiles
+  FOR SELECT TO anon USING (true);
+
 -- Admin only for write operations
 CREATE POLICY "Admin can manage profiles" ON profiles
   FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'))
   WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
 ```
+
+> **Note**: The anon read policy is safe because profiles only contain non-sensitive data (username, display name, role).
 
 ### Orders Table (Special Case)
 

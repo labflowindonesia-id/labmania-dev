@@ -1,5 +1,7 @@
 "use client"
 
+import { toast } from "sonner"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, FileText, Pencil, Trash2, Download, Loader2, RefreshCw, Upload } from "lucide-react"
+import { Plus, Search, FileText, Pencil, Trash2, Download, Loader2, RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useFetchPaginated, useFetch, useMutation } from "@/hooks/use-api"
 import { Pagination } from "@/components/ui/pagination"
@@ -90,6 +92,7 @@ export default function CalibrationLogsPage() {
 
     const [isUploading, setIsUploading] = useState(false)
     const [isEditUploading, setIsEditUploading] = useState(false)
+    const [isEditLoading, setIsEditLoading] = useState(false)
 
     // Fetch calibration logs from API with pagination
     const { data: logs, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<CalibrationLog>(
@@ -121,18 +124,7 @@ export default function CalibrationLogsPage() {
         }
     )
 
-    // Update mutation
-    const updateMutation = useMutation<CalibrationLog, typeof editFormData>(
-        selectedLog ? `/api/instruments/calibration/${selectedLog.id}` : "",
-        "PUT",
-        {
-            onSuccess: () => {
-                setIsEditDialogOpen(false)
-                setSelectedLog(null)
-                refetch()
-            }
-        }
-    )
+    // NOTE: updateMutation removed - using direct fetch in handleEditSubmit to fix closure issue
 
     // Delete mutation
     const deleteMutation = useMutation<{ success: boolean }, undefined>(
@@ -167,10 +159,32 @@ export default function CalibrationLogsPage() {
     }
 
     const handleEditSubmit = async () => {
-        if (!editFormData.performedDate) {
+        if (!editFormData.performedDate || !selectedLog) {
             return
         }
-        await updateMutation.mutate(editFormData)
+
+        setIsEditLoading(true)
+        try {
+            const response = await fetch(`/api/instruments/calibration/${selectedLog.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editFormData),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Gagal menyimpan')
+            }
+
+            toast.success('Log kalibrasi berhasil diperbarui')
+            setIsEditDialogOpen(false)
+            setSelectedLog(null)
+            refetch()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Terjadi kesalahan')
+        } finally {
+            setIsEditLoading(false)
+        }
     }
 
     const handleDelete = (log: CalibrationLog) => {
@@ -307,6 +321,14 @@ export default function CalibrationLogsPage() {
                                             const file = e.target.files?.[0]
                                             if (!file) return
 
+                                            // Validate file size (max 10MB for documents)
+                                            const maxSize = 10 * 1024 * 1024
+                                            if (file.size > maxSize) {
+                                                toast.error("Ukuran file terlalu besar. Maksimal: 10MB")
+                                                e.target.value = ""
+                                                return
+                                            }
+
                                             setIsUploading(true)
                                             try {
                                                 const formDataUpload = new FormData()
@@ -321,9 +343,14 @@ export default function CalibrationLogsPage() {
                                                 if (response.ok) {
                                                     const data = await response.json()
                                                     setFormData(prev => ({ ...prev, jobReportDocument: data.publicUrl }))
+                                                    toast.success("Dokumen berhasil diupload")
+                                                } else {
+                                                    const errorData = await response.json().catch(() => ({}))
+                                                    toast.error(errorData.error || "Upload gagal")
                                                 }
                                             } catch (error) {
                                                 console.error("Upload error:", error)
+                                                toast.error("Gagal mengupload dokumen")
                                             } finally {
                                                 setIsUploading(false)
                                             }
@@ -515,6 +542,14 @@ export default function CalibrationLogsPage() {
                                         const file = e.target.files?.[0]
                                         if (!file) return
 
+                                        // Validate file size (max 10MB for documents)
+                                        const maxSize = 10 * 1024 * 1024
+                                        if (file.size > maxSize) {
+                                            toast.error("Ukuran file terlalu besar. Maksimal: 10MB")
+                                            e.target.value = ""
+                                            return
+                                        }
+
                                         setIsEditUploading(true)
                                         try {
                                             const formDataUpload = new FormData()
@@ -529,9 +564,14 @@ export default function CalibrationLogsPage() {
                                             if (response.ok) {
                                                 const data = await response.json()
                                                 setEditFormData(prev => ({ ...prev, jobReportDocument: data.publicUrl }))
+                                                toast.success("Dokumen berhasil diupload")
+                                            } else {
+                                                const errorData = await response.json().catch(() => ({}))
+                                                toast.error(errorData.error || "Upload gagal")
                                             }
                                         } catch (error) {
                                             console.error("Upload error:", error)
+                                            toast.error("Gagal mengupload dokumen")
                                         } finally {
                                             setIsEditUploading(false)
                                         }
@@ -548,16 +588,13 @@ export default function CalibrationLogsPage() {
                             </div>
                             <p className="text-xs text-muted-foreground">Format: PDF, DOC, DOCX (max 10MB)</p>
                         </div>
-                        {updateMutation.error && (
-                            <p className="text-sm text-destructive">{updateMutation.error}</p>
-                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                             Batal
                         </Button>
-                        <Button onClick={handleEditSubmit} disabled={updateMutation.isLoading}>
-                            {updateMutation.isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        <Button onClick={handleEditSubmit} disabled={isEditLoading}>
+                            {isEditLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             Simpan
                         </Button>
                     </DialogFooter>

@@ -1,5 +1,7 @@
 import { db } from '@/lib/db';
 import * as schema from '@/lib/db/schema';
+import { notifications } from '@/lib/db/schema/notifications';
+import { supportRequests } from '@/lib/db/schema/support';
 import AdmZip from 'adm-zip';
 import { format } from 'date-fns';
 
@@ -56,22 +58,37 @@ class BackupService {
         const dateStr = format(new Date(), 'yyyy-MM-dd');
         const filename = `labmania_backup_${dateStr}.zip`;
 
-        // Define tables to backup
+        // Define tables to backup (21 tables total)
         const tablesToBackup = [
+            // Users
             { name: 'profiles', query: () => db.select().from(schema.profiles) },
+            // Instruments
             { name: 'instruments', query: () => db.select().from(schema.instruments) },
             { name: 'calibration_logs', query: () => db.select().from(schema.calibrationLogs) },
             { name: 'maintenance_logs', query: () => db.select().from(schema.maintenanceLogs) },
+            { name: 'schedule_events', query: () => db.select().from(schema.scheduleEvents) },
+            // Inventory Catalogs
             { name: 'reagent_catalog', query: () => db.select().from(schema.reagentCatalog) },
             { name: 'standard_catalog', query: () => db.select().from(schema.standardCatalog) },
+            { name: 'sample_catalog', query: () => db.select().from(schema.sampleCatalog) },
             { name: 'items_catalog', query: () => db.select().from(schema.itemsCatalog) },
+            // Warehouse
             { name: 'warehouse_chemicals', query: () => db.select().from(schema.warehouseChemicals) },
             { name: 'warehouse_items', query: () => db.select().from(schema.warehouseItems) },
+            // Orders
             { name: 'orders', query: () => db.select().from(schema.orders) },
             { name: 'order_items', query: () => db.select().from(schema.orderItems) },
+            // Usage & Training
             { name: 'usage_logs', query: () => db.select().from(schema.usageLogs) },
             { name: 'training_sets', query: () => db.select().from(schema.trainingSets) },
             { name: 'training_set_items', query: () => db.select().from(schema.trainingSetItems) },
+            { name: 'training_cost_logs', query: () => db.select().from(schema.trainingCostLogs) },
+            { name: 'training_cost_log_items', query: () => db.select().from(schema.trainingCostLogItems) },
+            // Documents
+            { name: 'documents', query: () => db.select().from(schema.documents) },
+            // Support & Notifications
+            { name: 'support_requests', query: () => db.select().from(supportRequests) },
+            { name: 'notifications', query: () => db.select().from(notifications) },
         ];
 
         // Process each table
@@ -138,8 +155,10 @@ class BackupService {
             'instruments',
             'calibration_logs',
             'maintenance_logs',
+            'schedule_events',
             'reagent_catalog',
             'standard_catalog',
+            'sample_catalog',
             'items_catalog',
             'warehouse_chemicals',
             'warehouse_items',
@@ -148,6 +167,11 @@ class BackupService {
             'usage_logs',
             'training_sets',
             'training_set_items',
+            'training_cost_logs',
+            'training_cost_log_items',
+            'documents',
+            'support_requests',
+            'notifications',
         ];
 
         return {

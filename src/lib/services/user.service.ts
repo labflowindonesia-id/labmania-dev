@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { db, schema } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
-import type { Profile, NewProfile } from '@/lib/db/schema/users';
+import type { Profile } from '@/lib/db/schema/users';
 
 export interface CreateUserInput {
     username: string;

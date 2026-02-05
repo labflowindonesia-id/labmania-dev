@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db';
-import { eq, desc, like, or, and, sql } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import type { ReagentCatalog, NewReagentCatalog, WarehouseChemical } from '@/lib/db/schema/inventory';
 
 export interface ReagentWithStock extends ReagentCatalog {
@@ -12,6 +12,8 @@ export interface ReagentFilters {
     search?: string;
     status?: string;
     location?: string;
+    sortBy?: 'fefo' | 'name' | 'stock';
+    sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
 }
@@ -35,8 +37,6 @@ class ReagentService {
         const limit = filters?.limit || 10;
 
         // Get all reagent catalogs
-        let query = db.select().from(schema.reagentCatalog);
-
         const reagents = await db.query.reagentCatalog.findMany({
             orderBy: desc(schema.reagentCatalog.createdAt),
         });
@@ -106,6 +106,33 @@ class ReagentService {
         if (filters?.location && filters.location !== 'all') {
             filteredReagents = filteredReagents.filter(r => r.storageLocation === filters.location);
         }
+
+        // Apply sorting (before pagination for scalability with >500 items)
+        const sortBy = filters?.sortBy || 'fefo';
+        const sortOrder = filters?.sortOrder || 'asc';
+
+        filteredReagents.sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortBy) {
+                case 'fefo':
+                    // Sort by nearest expiry date first (FEFO = First Expired First Out)
+                    const aDate = a.nearestExpDate ? new Date(a.nearestExpDate).getTime() : Infinity;
+                    const bDate = b.nearestExpDate ? new Date(b.nearestExpDate).getTime() : Infinity;
+                    comparison = aDate - bDate;
+                    break;
+                case 'name':
+                    // Sort alphabetically by name
+                    comparison = a.reagentName.localeCompare(b.reagentName, 'id');
+                    break;
+                case 'stock':
+                    // Sort by lowest stock first
+                    comparison = a.currentStock - b.currentStock;
+                    break;
+            }
+
+            return sortOrder === 'desc' ? -comparison : comparison;
+        });
 
         // Calculate pagination
         const total = filteredReagents.length;

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,13 +27,20 @@ import { useAuth } from "@/components/providers/auth-provider"
 
 export default function LoginPage() {
     const router = useRouter()
-    const { signIn } = useAuth()
+    const { signIn, user, isLoading: authLoading } = useAuth()
     const [username, setUsername] = useState("")
     const [password, setPassword] = useState("")
     const [role, setRole] = useState("analyst")
     const [isLoading, setIsLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Redirect to dashboard if already logged in
+    useEffect(() => {
+        if (!authLoading && user) {
+            router.replace("/")
+        }
+    }, [user, authLoading, router])
 
     // Contact Support States
     const [isContactOpen, setIsContactOpen] = useState(false)

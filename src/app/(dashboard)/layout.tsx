@@ -31,9 +31,13 @@ export default function DashboardLayout({
         )
     }
 
-    // Don't render dashboard if not authenticated
+    // Don't render dashboard if not authenticated - show loading while redirecting
     if (!user) {
-        return null
+        return (
+            <div className="min-h-screen flex items-center justify-center" suppressHydrationWarning>
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        )
     }
 
     return (

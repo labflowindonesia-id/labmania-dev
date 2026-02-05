@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { warehouseItemService } from '@/lib/services/warehouse-item.service';
 
+// Cache control headers for GET requests
+const CACHE_HEADERS = {
+    'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+};
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -18,7 +23,7 @@ export async function GET(request: Request) {
         return NextResponse.json({
             data: result.data,
             pagination: result.pagination
-        });
+        }, { headers: CACHE_HEADERS });
     } catch (error) {
         console.error('Error fetching warehouse items:', error);
         return NextResponse.json(

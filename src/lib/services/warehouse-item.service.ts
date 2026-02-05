@@ -1,6 +1,6 @@
 import { db, schema } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
-import type { WarehouseItem, NewWarehouseItem } from '@/lib/db/schema/inventory';
+import type { WarehouseItem } from '@/lib/db/schema/inventory';
 
 export interface WarehouseItemWithUser extends WarehouseItem {
     receivedByUser?: { fullName: string } | null;
@@ -15,6 +15,7 @@ export interface CreateWarehouseItemInput {
     category: 'barang' | 'consumable';
     currentQuantity: number;
     unit: 'unit' | 'pack' | 'pcs' | 'set' | 'roll' | 'ml' | 'L' | 'g' | 'kg';
+    unitCost?: number | null;
     receivedDate: string;
     receivedBy?: string;
     receivedByName?: string; // For static values like GAP/KEP/Manager
@@ -110,6 +111,7 @@ class WarehouseItemService {
             category: data.category,
             currentQuantity: data.currentQuantity,
             unit: data.unit,
+            unitCost: data.unitCost ? String(data.unitCost) : null,
             receivedDate: data.receivedDate,
             receivedBy: data.receivedBy,
             receivedByName: data.receivedByName,
@@ -122,12 +124,15 @@ class WarehouseItemService {
      * Update warehouse item
      */
     async update(id: string, data: Partial<CreateWarehouseItemInput>): Promise<WarehouseItem | null> {
+        // Convert unitCost from number to string if present
+        const updateData: Record<string, unknown> = { ...data, updatedAt: new Date() };
+        if (data.unitCost !== undefined) {
+            updateData.unitCost = data.unitCost ? String(data.unitCost) : null;
+        }
+
         const [item] = await db
             .update(schema.warehouseItems)
-            .set({
-                ...data,
-                updatedAt: new Date(),
-            })
+            .set(updateData)
             .where(eq(schema.warehouseItems.id, id))
             .returning();
         return item || null;

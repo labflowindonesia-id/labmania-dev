@@ -15,6 +15,13 @@
       "when": 1767072619270,
       "tag": "0001_milky_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770085497989,
+      "tag": "0002_friendly_demogoblin",
+      "breakpoints": true
     }
   ]
 }

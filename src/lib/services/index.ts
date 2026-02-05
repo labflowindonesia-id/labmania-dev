@@ -7,12 +7,16 @@ export { instrumentService } from './instrument.service';
 export { scheduleService } from './schedule.service';
 export { chatService } from './chat.service';
 export { standardService } from './standard.service';
+export { sampleService } from './sample.service';
 export { itemService } from './item.service';
 export { trainingService } from './training.service';
 export { usageLogService } from './usage-log.service';
 export { warehouseChemicalService } from './warehouse-chemical.service';
 export { warehouseItemService } from './warehouse-item.service';
 export { backupService } from './backup.service';
+export { costService } from './cost.service';
+export { documentService } from './document.service';
+// NOTE: Uncomment after running supabase/migrations/create_notifications_table.sql
+// export { notificationService } from './notification.service';
 export { StorageService, STORAGE_BUCKETS, BUCKET_CONFIG } from './storage.service';
 export type { StorageBucket } from './storage.service';
-

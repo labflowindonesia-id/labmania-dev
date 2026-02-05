@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
             search: searchParams.get('search') || undefined,
             status: searchParams.get('status') || undefined,
             location: searchParams.get('location') || undefined,
+            sortBy: (searchParams.get('sortBy') as 'fefo' | 'name' | 'stock') || 'fefo',
+            sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || 'asc',
             page: parseInt(searchParams.get('page') || '1'),
             limit: limitParam === 'all' ? 99999 : parseInt(limitParam || '10'),
         };

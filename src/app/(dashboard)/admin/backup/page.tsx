@@ -75,7 +75,7 @@ export default function BackupPage() {
                         <Database className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">14</div>
+                        <div className="text-2xl font-bold">21</div>
                         <p className="text-xs text-muted-foreground">Tables included in backup</p>
                     </CardContent>
                 </Card>
@@ -148,8 +148,8 @@ export default function BackupPage() {
                     {/* Last Backup Result */}
                     {lastBackupResult && (
                         <div className={`flex items-center gap-2 rounded-lg p-3 ${lastBackupResult.success
-                                ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                                : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+                            ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                            : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
                             }`}>
                             {lastBackupResult.success ? (
                                 <>
@@ -189,8 +189,10 @@ export default function BackupPage() {
                             "instruments",
                             "calibration_logs",
                             "maintenance_logs",
+                            "schedule_events",
                             "reagent_catalog",
                             "standard_catalog",
+                            "sample_catalog",
                             "items_catalog",
                             "warehouse_chemicals",
                             "warehouse_items",
@@ -199,6 +201,11 @@ export default function BackupPage() {
                             "usage_logs",
                             "training_sets",
                             "training_set_items",
+                            "training_cost_logs",
+                            "training_cost_log_items",
+                            "documents",
+                            "support_requests",
+                            "notifications",
                         ].map((table) => (
                             <div
                                 key={table}

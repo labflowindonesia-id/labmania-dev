@@ -79,6 +79,7 @@ interface WarehouseItem {
 const itemTypeConfig: Record<string, { label: string; color: string }> = {
     reagent: { label: "Reagen", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
     standard: { label: "Standard", color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200" },
+    sample: { label: "Sample", color: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
     consumable: { label: "Consumable", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
 }
 
@@ -161,6 +162,14 @@ export default function UsageLogsPage() {
                     label: `${c.name} (${c.remainingAmount} ${c.sizeUnit})`,
                     category: c.catalogType,
                 }))
+        } else if (formData.itemType === "sample") {
+            return warehouseChemicals
+                .filter(c => c.catalogType === "sample")
+                .map(c => ({
+                    value: c.id,
+                    label: `${c.name} (${c.remainingAmount} ${c.sizeUnit})`,
+                    category: c.catalogType,
+                }))
         } else if (formData.itemType === "consumable") {
             return warehouseItems
                 .filter(i => i.category === "consumable")
@@ -179,7 +188,7 @@ export default function UsageLogsPage() {
     const handleItemSelect = (itemId: string) => {
         let selectedItem: { name: string; unit: string } | null = null
 
-        if (formData.itemType === "reagent" || formData.itemType === "standard") {
+        if (formData.itemType === "reagent" || formData.itemType === "standard" || formData.itemType === "sample") {
             const chemical = warehouseChemicals.find(c => c.id === itemId)
             if (chemical) {
                 selectedItem = { name: chemical.name, unit: chemical.sizeUnit }
@@ -211,6 +220,24 @@ export default function UsageLogsPage() {
             unit: "",
         })
     }
+
+    // Get available stock for selected item
+    const getAvailableStock = (): number => {
+        if (!formData.warehouseItemId) return 0
+
+        if (formData.itemType === "reagent" || formData.itemType === "standard" || formData.itemType === "sample") {
+            const chemical = warehouseChemicals.find(c => c.id === formData.warehouseItemId)
+            return chemical ? parseFloat(chemical.remainingAmount) : 0
+        } else if (formData.itemType === "consumable") {
+            const item = warehouseItems.find(i => i.id === formData.warehouseItemId)
+            return item ? item.currentQuantity : 0
+        }
+        return 0
+    }
+
+    const availableStock = getAvailableStock()
+    const requestedQuantity = parseFloat(formData.quantityUsed) || 0
+    const isStockInsufficient = Boolean(formData.warehouseItemId && requestedQuantity > availableStock)
 
     // Fetch usage logs from API with pagination
     const { data: usageLogs, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<UsageLog>(
@@ -327,6 +354,7 @@ export default function UsageLogsPage() {
                                         <SelectContent>
                                             <SelectItem value="reagent">Reagen</SelectItem>
                                             <SelectItem value="standard">Standard</SelectItem>
+                                            <SelectItem value="sample">Sample</SelectItem>
                                             <SelectItem value="consumable">Consumable</SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -365,6 +393,8 @@ export default function UsageLogsPage() {
                                     <Input
                                         id="quantityUsed"
                                         type="number"
+                                        min="0"
+                                        step="0.01"
                                         placeholder="10"
                                         value={formData.quantityUsed}
                                         onChange={(e) => setFormData({ ...formData, quantityUsed: e.target.value })}
@@ -391,6 +421,11 @@ export default function UsageLogsPage() {
                                     rows={3}
                                 />
                             </div>
+                            {isStockInsufficient && (
+                                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
+                                    ⚠️ Stok tidak mencukupi! Tersedia: {availableStock} {formData.unit}, Diminta: {requestedQuantity} {formData.unit}
+                                </div>
+                            )}
                         </div>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -398,7 +433,7 @@ export default function UsageLogsPage() {
                             </Button>
                             <Button
                                 onClick={handleSubmit}
-                                disabled={createMutation.isLoading || !formData.usageItem || !formData.itemType || !formData.quantityUsed}
+                                disabled={createMutation.isLoading || !formData.usageItem || !formData.itemType || !formData.quantityUsed || isStockInsufficient}
                             >
                                 {createMutation.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Simpan
@@ -413,7 +448,7 @@ export default function UsageLogsPage() {
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                        placeholder="Cari item atau pengguna..."
+                        placeholder="Cari Item"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-9"
@@ -427,6 +462,7 @@ export default function UsageLogsPage() {
                         <SelectItem value="all">Semua Tipe</SelectItem>
                         <SelectItem value="reagent">Reagen</SelectItem>
                         <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="sample">Sample</SelectItem>
                         <SelectItem value="consumable">Consumable</SelectItem>
                     </SelectContent>
                 </Select>

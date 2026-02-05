@@ -38,12 +38,25 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Reduce stock from warehouse based on item type
-        if (body.warehouseItemId && body.quantityUsed) {
-            const quantityUsed = parseFloat(body.quantityUsed);
+        // Validate that quantityUsed is positive
+        const quantityUsed = parseFloat(body.quantityUsed);
+        if (quantityUsed <= 0) {
+            return NextResponse.json(
+                { error: 'Jumlah penggunaan harus lebih dari 0' },
+                { status: 400 }
+            );
+        }
 
-            if (body.itemType === 'reagent' || body.itemType === 'standard') {
-                // Reduce stock from warehouse chemicals
+        // Reduce stock from warehouse based on item type
+        // Also capture cost data for reporting
+        let unitCost: string | null = null;
+        let totalCost: string | null = null;
+        let warehouseType: string | null = null;
+
+        if (body.warehouseItemId && body.quantityUsed) {
+
+            if (body.itemType === 'reagent' || body.itemType === 'standard' || body.itemType === 'sample') {
+                // Reduce stock from warehouse chemicals (reagent/standard/sample)
                 const chemical = await warehouseChemicalService.getById(body.warehouseItemId);
                 if (chemical) {
                     const currentAmount = parseFloat(chemical.remainingAmount);
@@ -55,6 +68,14 @@ export async function POST(request: NextRequest) {
                         remainingAmount: newAmount.toString(),
                         status: newStatus,
                     });
+
+                    // Calculate cost from unitCostBase (price per mL/g)
+                    if (chemical.unitCostBase) {
+                        unitCost = chemical.unitCostBase;
+                        const cost = quantityUsed * parseFloat(chemical.unitCostBase);
+                        totalCost = cost.toFixed(2);
+                    }
+                    warehouseType = 'chemical';
                 }
             } else if (body.itemType === 'consumable') {
                 // Reduce stock from warehouse items
@@ -66,6 +87,14 @@ export async function POST(request: NextRequest) {
                     await warehouseItemService.update(body.warehouseItemId, {
                         currentQuantity: newQuantity,
                     });
+
+                    // Calculate cost from unitCost (price per pcs)
+                    if (item.unitCost) {
+                        unitCost = item.unitCost;
+                        const cost = quantityUsed * parseFloat(item.unitCost);
+                        totalCost = cost.toFixed(2);
+                    }
+                    warehouseType = 'item';
                 }
             }
         }
@@ -77,6 +106,10 @@ export async function POST(request: NextRequest) {
             itemType: body.itemType,
             quantityUsed: body.quantityUsed,
             unit: body.unit || null,
+            unitCost: unitCost,
+            totalCost: totalCost,
+            warehouseItemId: body.warehouseItemId || null,
+            warehouseType: warehouseType,
             notes: body.notes || null,
         });
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { toast } from "sonner"
 import { use, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -528,7 +529,7 @@ export default function InstrumentDetailPage({ params }: { params: Promise<{ id:
                                 )}
                             </div>
                             <p className="text-xs text-muted-foreground text-center mt-2">
-                                {instrument.photoUrl ? "Klik untuk melihat foto lebih besar" : "Belum ada foto"}
+                                {instrument.photoUrl ? "" : "Belum ada foto"}
                             </p>
                         </CardContent>
                     </Card>
@@ -699,6 +700,14 @@ export default function InstrumentDetailPage({ params }: { params: Promise<{ id:
                                             const file = e.target.files?.[0]
                                             if (!file) return
 
+                                            // Validate file size (max 5MB)
+                                            const maxSize = 5 * 1024 * 1024
+                                            if (file.size > maxSize) {
+                                                toast.error("Ukuran file terlalu besar. Maksimal: 5MB")
+                                                e.target.value = ""
+                                                return
+                                            }
+
                                             setIsUploading(true)
                                             try {
                                                 const formDataUpload = new FormData()
@@ -713,9 +722,14 @@ export default function InstrumentDetailPage({ params }: { params: Promise<{ id:
                                                 if (response.ok) {
                                                     const data = await response.json()
                                                     setEditFormData(prev => ({ ...prev, photo: data.publicUrl }))
+                                                    toast.success("Foto berhasil diupload")
+                                                } else {
+                                                    const errorData = await response.json().catch(() => ({}))
+                                                    toast.error(errorData.error || "Upload gagal")
                                                 }
                                             } catch (error) {
                                                 console.error("Upload error:", error)
+                                                toast.error("Gagal mengupload foto")
                                             } finally {
                                                 setIsUploading(false)
                                             }

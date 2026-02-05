@@ -95,7 +95,7 @@ export default function OrdersPage() {
     }
 
     // Fetch orders from API with pagination
-    const { data: displayOrders, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Order>(
+    const { data: displayOrders, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<Order>(
         "/api/inventory/orders",
         { status: statusFilter }
     )
@@ -279,7 +279,7 @@ export default function OrdersPage() {
                         <SelectItem value="rejected">Ditolak</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button variant="outline" size="icon" onClick={() => refetch()}>
+                <Button id="refresh-orders" type="button" variant="outline" size="icon" onClick={() => refetch()}>
                     <RefreshCw className="h-4 w-4" />
                 </Button>
             </div>
@@ -344,28 +344,37 @@ export default function OrdersPage() {
                                         {order.status === "pending" && (
                                             <>
                                                 <Button
+                                                    id={`approve-order-${order.id}`}
+                                                    type="button"
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-green-600"
                                                     onClick={() => handleApprove(order.id)}
+                                                    title="Setujui pesanan"
                                                 >
                                                     <Check className="h-4 w-4" />
                                                 </Button>
                                                 <Button
+                                                    id={`reject-order-${order.id}`}
+                                                    type="button"
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-destructive"
                                                     onClick={() => handleReject(order.id)}
+                                                    title="Tolak pesanan"
                                                 >
                                                     <X className="h-4 w-4" />
                                                 </Button>
                                             </>
                                         )}
                                         <Button
+                                            id={`delete-order-${order.id}`}
+                                            type="button"
                                             variant="ghost"
                                             size="icon"
                                             className="text-destructive hover:text-destructive"
                                             onClick={() => setDeleteId(order.id)}
+                                            title="Hapus pesanan"
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>

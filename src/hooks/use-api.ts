@@ -162,6 +162,7 @@ interface UseFetchPaginatedResult<T> {
     data: T[];
     pagination: PaginationMeta;
     isLoading: boolean;
+    isFetching: boolean; // NEW: For subtle loading indicator during refetch
     error: string | null;
     refetch: () => Promise<void>;
     page: number;
@@ -173,7 +174,7 @@ interface UseFetchPaginatedResult<T> {
 export function useFetchPaginated<T>(
     baseUrl: string,
     filters: Record<string, string | undefined> = {},
-    options: UseFetchPaginatedOptions = { immediate: true, debounceMs: 300 }
+    options: UseFetchPaginatedOptions = { immediate: true, debounceMs: 500 }
 ): UseFetchPaginatedResult<T> {
     const [data, setData] = useState<T[]>([]);
     const [pagination, setPagination] = useState<PaginationMeta>({
@@ -182,17 +183,19 @@ export function useFetchPaginated<T>(
         total: 0,
         totalPages: 0,
     });
-    const [isLoading, setIsLoading] = useState(options.immediate ?? true);
+    // Separate loading states for better UX
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [isFetching, setIsFetching] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [page, setPageState] = useState(DEFAULT_PAGE);
     const [search, setSearchState] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
 
-    // Debounce search
+    // Debounce search with 500ms delay (best practice for search UX)
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(search);
-        }, options.debounceMs ?? 300);
+        }, options.debounceMs ?? 500);
         return () => clearTimeout(timer);
     }, [search, options.debounceMs]);
 
@@ -225,7 +228,9 @@ export function useFetchPaginated<T>(
     }, [baseUrl, page, debouncedSearch, filtersKey]);
 
     const fetchData = useCallback(async () => {
-        setIsLoading(true);
+        // Don't clear data during fetch (SWR pattern - Stale While Revalidate)
+        // This prevents blank screen during search
+        setIsFetching(true);
         setError(null);
         try {
             const url = buildUrl();
@@ -239,17 +244,21 @@ export function useFetchPaginated<T>(
             setPagination(result.pagination);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Terjadi kesalahan");
-            setData([]);
-            setPagination({
-                page: DEFAULT_PAGE,
-                limit: DEFAULT_PAGE_SIZE,
-                total: 0,
-                totalPages: 0,
-            });
+            // Only clear data on initial load error, keep previous data on refetch error
+            if (isInitialLoad) {
+                setData([]);
+                setPagination({
+                    page: DEFAULT_PAGE,
+                    limit: DEFAULT_PAGE_SIZE,
+                    total: 0,
+                    totalPages: 0,
+                });
+            }
         } finally {
-            setIsLoading(false);
+            setIsFetching(false);
+            setIsInitialLoad(false);
         }
-    }, [buildUrl]);
+    }, [buildUrl, isInitialLoad]);
 
     useEffect(() => {
         if (options.immediate) {
@@ -268,7 +277,8 @@ export function useFetchPaginated<T>(
     return {
         data,
         pagination,
-        isLoading,
+        isLoading: isInitialLoad && isFetching, // Only true on first load
+        isFetching, // True during any fetch (for subtle indicator)
         error,
         refetch: fetchData,
         page,

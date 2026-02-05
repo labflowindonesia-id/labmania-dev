@@ -98,17 +98,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         try {
             console.log('[Auth] Fetching session from API...');
+
+            // Add timeout to prevent hanging forever on slow server responses
+            const timeoutId = setTimeout(() => {
+                console.log('[Auth] Session fetch timeout - aborting');
+                abortControllerRef.current?.abort();
+            }, 10000); // 10 second timeout
+
             const response = await fetch("/api/auth/session", {
                 signal: abortControllerRef.current.signal,
             });
+
+            clearTimeout(timeoutId);
+
             const data = await response.json();
             const sessionUser = data.user || null;
             setUser(sessionUser);
             setCachedSession(sessionUser);
         } catch (error) {
-            // Ignore abort errors
+            // Ignore abort errors - treat as no session (will redirect to login)
             if (error instanceof Error && error.name === 'AbortError') {
-                console.log('[Auth] Session check aborted');
+                console.log('[Auth] Session check aborted or timed out');
+                setUser(null);
+                clearCachedSession();
                 return;
             }
             console.error("Session check error:", error);

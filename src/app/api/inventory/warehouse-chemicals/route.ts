@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { warehouseChemicalService } from '@/lib/services/warehouse-chemical.service';
 
+// Cache control headers for GET requests
+const CACHE_HEADERS = {
+    'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+};
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -13,6 +18,7 @@ export async function GET(request: Request) {
             page: parseInt(searchParams.get('page') || '1'),
             limit: limitParam === 'all' ? 99999 : parseInt(limitParam || '10'),
         };
+        const sortBy = searchParams.get('sortBy') || 'fefo';
 
         const result = await warehouseChemicalService.getAll(filters);
 
@@ -29,10 +35,25 @@ export async function GET(request: Request) {
             };
         });
 
-        return NextResponse.json({
-            data: chemicalsWithExpiry,
-            pagination: result.pagination
+        // Apply sorting based on sortBy parameter
+        const sortedChemicals = [...chemicalsWithExpiry].sort((a, b) => {
+            if (sortBy === 'fefo') {
+                // Sort by expiry date ascending (nearest first)
+                return a.daysUntilExpiry - b.daysUntilExpiry;
+            } else if (sortBy === 'name') {
+                // Sort by name A-Z
+                return a.name.localeCompare(b.name);
+            } else if (sortBy === 'newest') {
+                // Sort by received date descending (newest first)
+                return new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime();
+            }
+            return 0;
         });
+
+        return NextResponse.json({
+            data: sortedChemicals,
+            pagination: result.pagination
+        }, { headers: CACHE_HEADERS });
     } catch (error) {
         console.error('Error fetching warehouse chemicals:', error);
         return NextResponse.json(

@@ -13,6 +13,8 @@ export interface StandardFilters {
     search?: string;
     status?: string;
     location?: string;
+    sortBy?: 'fefo' | 'name' | 'stock';
+    sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
 }
@@ -106,6 +108,33 @@ class StandardService {
         if (filters?.location && filters.location !== 'all') {
             filteredStandards = filteredStandards.filter(s => s.storageLocation === filters.location);
         }
+
+        // Apply sorting (before pagination for scalability with >500 items)
+        const sortBy = filters?.sortBy || 'fefo';
+        const sortOrder = filters?.sortOrder || 'asc';
+
+        filteredStandards.sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortBy) {
+                case 'fefo':
+                    // Sort by nearest expiry date first (FEFO = First Expired First Out)
+                    const aDate = a.nearestExpDate ? new Date(a.nearestExpDate).getTime() : Infinity;
+                    const bDate = b.nearestExpDate ? new Date(b.nearestExpDate).getTime() : Infinity;
+                    comparison = aDate - bDate;
+                    break;
+                case 'name':
+                    // Sort alphabetically by name
+                    comparison = a.standardName.localeCompare(b.standardName, 'id');
+                    break;
+                case 'stock':
+                    // Sort by lowest stock first
+                    comparison = a.currentStock - b.currentStock;
+                    break;
+            }
+
+            return sortOrder === 'desc' ? -comparison : comparison;
+        });
 
         // Calculate pagination
         const total = filteredStandards.length;

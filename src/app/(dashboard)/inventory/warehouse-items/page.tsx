@@ -54,17 +54,13 @@ interface WarehouseItem {
     category: ItemCategory
     currentQuantity: number
     unit: string
+    unitCost?: string | number | null
     receivedDate: string
     receivedBy?: string
     receivedByName?: string | null
     receivedByUser?: { fullName: string } | null
 }
 
-interface CatalogItem {
-    id: string
-    name: string
-    category: 'barang' | 'consumable'
-}
 
 const categoryConfig: Record<ItemCategory, { label: string; color: string }> = {
     barang: { label: "Barang", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
@@ -94,6 +90,7 @@ export default function WarehouseItemsPage() {
         quantity: "",
         unit: "pcs",
         receivedBy: "",
+        unitCost: "",
     })
 
     // Fetch catalogs with caching
@@ -112,7 +109,7 @@ export default function WarehouseItemsPage() {
     )
 
     // Fetch warehouse items from API with pagination
-    const { data: items, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseItem>(
+    const { data: items, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseItem>(
         "/api/inventory/warehouse-items",
         { category: categoryFilter }
     )
@@ -126,7 +123,7 @@ export default function WarehouseItemsPage() {
             onSuccess: () => {
                 refetch()
                 setIsAddDialogOpen(false)
-                setFormData({ catalogId: "", name: "", specification: "", lotNo: "", category: "", quantity: "", unit: "pcs", receivedBy: "" })
+                setFormData({ catalogId: "", name: "", specification: "", lotNo: "", category: "", quantity: "", unit: "pcs", receivedBy: "", unitCost: "" })
             },
         }
     )
@@ -166,6 +163,7 @@ export default function WarehouseItemsPage() {
             category: formData.category,
             currentQuantity: parseInt(formData.quantity) || 0,
             unit: formData.unit,
+            unitCost: formData.unitCost ? parseFloat(formData.unitCost) : null,
             receivedDate: new Date().toISOString().split("T")[0],
             receivedByName: formData.receivedBy, // Store static value in text field
         })
@@ -336,6 +334,18 @@ export default function WarehouseItemsPage() {
                                     </Select>
                                 </div>
                             </div>
+                            {/* Harga per Unit */}
+                            <div className="space-y-2">
+                                <Label htmlFor="unitCost">Harga per Unit (Rp)</Label>
+                                <Input
+                                    id="unitCost"
+                                    type="number"
+                                    placeholder="Contoh: 15000"
+                                    value={formData.unitCost}
+                                    onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
+                                />
+                                <p className="text-xs text-muted-foreground">Harga satuan untuk perhitungan biaya training</p>
+                            </div>
                         </div>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -354,7 +364,7 @@ export default function WarehouseItemsPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -364,6 +374,7 @@ export default function WarehouseItemsPage() {
                         className="pl-9"
                     />
                 </div>
+                {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Kategori" />
@@ -389,7 +400,8 @@ export default function WarehouseItemsPage() {
                             <TableHead>Kategori</TableHead>
                             <TableHead className="text-center">Qty</TableHead>
                             <TableHead>Satuan</TableHead>
-                            <TableHead>Tgl Terima</TableHead>
+                            <TableHead className="text-right min-w-[120px] pr-6">Harga/Unit</TableHead>
+                            <TableHead className="min-w-[110px] pl-3">Tgl Terima</TableHead>
                             <TableHead>Diterima Oleh</TableHead>
                             <TableHead className="text-center">Aksi</TableHead>
                         </TableRow>
@@ -409,7 +421,10 @@ export default function WarehouseItemsPage() {
                                 </TableCell>
                                 <TableCell className="text-center font-medium">{item.currentQuantity}</TableCell>
                                 <TableCell>{item.unit}</TableCell>
-                                <TableCell>{new Date(item.receivedDate).toLocaleDateString("id-ID")}</TableCell>
+                                <TableCell className="text-right font-medium pr-6">
+                                    {item.unitCost ? `Rp ${Number(item.unitCost).toLocaleString('id-ID')}` : '-'}
+                                </TableCell>
+                                <TableCell className="pl-3">{new Date(item.receivedDate).toLocaleDateString("id-ID")}</TableCell>
                                 <TableCell>{item.receivedByName || item.receivedByUser?.fullName || "-"}</TableCell>
                                 <TableCell className="text-center">
                                     <Button

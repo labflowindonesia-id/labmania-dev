@@ -1,5 +1,6 @@
 "use client"
 
+import { toast } from "sonner"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -107,7 +108,7 @@ export default function MaintenancePage() {
     })
 
     // Fetch maintenance logs from API with pagination
-    const { data: logs, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<MaintenanceLog>(
+    const { data: logs, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<MaintenanceLog>(
         "/api/instruments/maintenance",
         { status: statusFilter, maintenanceType: typeFilter }
     )
@@ -137,18 +138,8 @@ export default function MaintenancePage() {
         }
     )
 
-    // Update mutation
-    const updateMutation = useMutation<MaintenanceLog, typeof editFormData>(
-        selectedLog ? `/api/instruments/maintenance/${selectedLog.id}` : "",
-        "PUT",
-        {
-            onSuccess: () => {
-                setIsEditDialogOpen(false)
-                setSelectedLog(null)
-                refetch()
-            }
-        }
-    )
+    // Update mutation removed - using direct fetch in handleEditSubmit to fix closure issue
+    const [isEditLoading, setIsEditLoading] = useState(false)
 
     // Delete mutation
     const deleteMutation = useMutation<{ success: boolean }, undefined>(
@@ -183,10 +174,32 @@ export default function MaintenancePage() {
     }
 
     const handleEditSubmit = async () => {
-        if (!editFormData.maintenanceType || !editFormData.maintenanceDate) {
+        if (!editFormData.maintenanceType || !editFormData.maintenanceDate || !selectedLog) {
             return
         }
-        await updateMutation.mutate(editFormData)
+
+        setIsEditLoading(true)
+        try {
+            const response = await fetch(`/api/instruments/maintenance/${selectedLog.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editFormData),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Gagal menyimpan')
+            }
+
+            toast.success('Log maintenance berhasil diperbarui')
+            setIsEditDialogOpen(false)
+            setSelectedLog(null)
+            refetch()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Terjadi kesalahan')
+        } finally {
+            setIsEditLoading(false)
+        }
     }
 
     const handleDelete = (log: MaintenanceLog) => {
@@ -576,16 +589,13 @@ export default function MaintenancePage() {
                                 onChange={(e) => setEditFormData(prev => ({ ...prev, maintenanceActions: e.target.value }))}
                             />
                         </div>
-                        {updateMutation.error && (
-                            <p className="text-sm text-destructive">{updateMutation.error}</p>
-                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                             Batal
                         </Button>
-                        <Button onClick={handleEditSubmit} disabled={updateMutation.isLoading}>
-                            {updateMutation.isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        <Button onClick={handleEditSubmit} disabled={isEditLoading}>
+                            {isEditLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             Simpan
                         </Button>
                     </DialogFooter>

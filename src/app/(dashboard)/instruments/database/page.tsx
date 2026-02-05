@@ -42,6 +42,7 @@ import { Plus, Search, Microscope, ChevronDown, Trash2, Calendar, Eye, Loader2, 
 import { InstrumentStatus, AssetType } from "@/types"
 import { useFetchPaginated, useMutation } from "@/hooks/use-api"
 import { Pagination } from "@/components/ui/pagination"
+import { toast } from "sonner"
 
 interface Instrument {
     id: string
@@ -96,6 +97,14 @@ export default function InstrumentDatabasePage() {
         const file = e.target.files?.[0]
         if (!file) return
 
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+        if (file.size > maxSize) {
+            toast.error("Ukuran file terlalu besar. Maksimal: 5MB")
+            e.target.value = ""
+            return
+        }
+
         // Show preview immediately
         const reader = new FileReader()
         reader.onloadend = () => {
@@ -132,7 +141,7 @@ export default function InstrumentDatabasePage() {
     }
 
     // Fetch instruments from API with pagination
-    const { data: instruments, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<Instrument>(
+    const { data: instruments, pagination, isLoading, isFetching, error, refetch, search, setSearch, setPage } = useFetchPaginated<Instrument>(
         "/api/instruments",
         { status: statusFilter, type: typeFilter }
     )

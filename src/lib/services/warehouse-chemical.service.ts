@@ -1,6 +1,6 @@
 import { db, schema } from '@/lib/db';
 import { eq, desc } from 'drizzle-orm';
-import type { WarehouseChemical, NewWarehouseChemical } from '@/lib/db/schema/inventory';
+import type { WarehouseChemical } from '@/lib/db/schema/inventory';
 
 export interface WarehouseChemicalWithUser extends WarehouseChemical {
     receivedByUser?: { fullName: string } | null;
@@ -8,7 +8,7 @@ export interface WarehouseChemicalWithUser extends WarehouseChemical {
 
 export interface CreateWarehouseChemicalInput {
     catalogId: string;
-    catalogType: 'reagent' | 'standard';
+    catalogType: 'reagent' | 'standard' | 'sample';
     name: string;
     receivedDate: string;
     sizeValue: string;
@@ -19,6 +19,8 @@ export interface CreateWarehouseChemicalInput {
     receivedBy?: string;
     receivedByName?: string; // For static values like GAP/KEP/Manager
     status?: 'tersedia' | 'sedang_digunakan' | 'habis';
+    totalPrice?: string;
+    unitCostBase?: string;
 }
 
 export interface WarehouseChemicalFilters {
@@ -116,6 +118,8 @@ class WarehouseChemicalService {
             receivedBy: data.receivedBy,
             receivedByName: data.receivedByName,
             status: data.status || 'tersedia',
+            totalPrice: data.totalPrice,
+            unitCostBase: data.unitCostBase,
         }).returning();
 
         return chemical;

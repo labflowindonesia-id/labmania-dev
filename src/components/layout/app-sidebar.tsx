@@ -4,6 +4,7 @@ import {
     LayoutDashboard,
     FlaskConical,
     TestTubes,
+    TestTube2,
     Package,
     Warehouse,
     ClipboardList,
@@ -20,6 +21,8 @@ import {
     User,
     Settings,
     Users,
+    DollarSign,
+    FolderOpen,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { usePathname, useRouter } from "next/navigation"
@@ -59,6 +62,11 @@ const inventoryItems = [
         icon: TestTubes,
     },
     {
+        title: "Katalog Sample",
+        url: "/inventory/samples",
+        icon: TestTube2,
+    },
+    {
         title: "Katalog Barang",
         url: "/inventory/items",
         icon: Package,
@@ -87,6 +95,16 @@ const inventoryItems = [
         title: "Training Usage",
         url: "/inventory/training",
         icon: GraduationCap,
+    },
+    {
+        title: "Laporan Pengeluaran",
+        url: "/inventory/training/reports",
+        icon: DollarSign,
+    },
+    {
+        title: "Document Library",
+        url: "/inventory/documents",
+        icon: FolderOpen,
     },
 ]
 
@@ -117,7 +135,11 @@ export function AppSidebar() {
 
     const isActive = (url: string) => {
         if (url === "/") return pathname === "/"
-        return pathname.startsWith(url)
+        // Exact match for routes that have nested children (prevents /inventory/training from matching /inventory/training/reports)
+        if (url === "/inventory/training" && pathname.startsWith("/inventory/training/")) {
+            return false
+        }
+        return pathname === url || pathname.startsWith(url + "/")
     }
 
     const handleLogout = async () => {
@@ -324,4 +346,5 @@ export function AppSidebar() {
         </Sidebar>
     )
 }
+
 

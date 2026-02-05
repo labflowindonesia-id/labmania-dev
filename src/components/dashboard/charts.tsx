@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { memo, useMemo, useState, useEffect } from "react"
 import {
     PieChart,
     Pie,
@@ -15,6 +15,31 @@ import {
     CartesianGrid,
     Label
 } from "recharts"
+
+// Hook to defer rendering to idle time - reduces TBT by not blocking main thread
+function useIdleRender(delay: number = 0): boolean {
+    const [shouldRender, setShouldRender] = useState(false)
+
+    useEffect(() => {
+        // Use requestIdleCallback if available, otherwise setTimeout
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            const id = window.requestIdleCallback(() => setShouldRender(true), { timeout: delay + 100 })
+            return () => window.cancelIdleCallback(id)
+        } else {
+            const id = setTimeout(() => setShouldRender(true), delay)
+            return () => clearTimeout(id)
+        }
+    }, [delay])
+
+    return shouldRender
+}
+
+// Chart skeleton for loading state
+const ChartSkeleton = ({ height = 250 }: { height?: number }) => (
+    <div className={`h-[${height}px] animate-pulse bg-muted rounded-lg flex items-center justify-center`}>
+        <span className="text-muted-foreground text-sm">Loading chart...</span>
+    </div>
+)
 
 // --- Interfaces ---
 
@@ -88,10 +113,13 @@ const BarTooltipContent = ({ active, payload, label }: { active?: boolean; paylo
 
 // --- Main Components ---
 
-export function InstrumentStatusChart({ data }: InstrumentStatusChartProps) {
+export const InstrumentStatusChart = memo(function InstrumentStatusChart({ data }: InstrumentStatusChartProps) {
+    const shouldRender = useIdleRender(0) // First chart renders first
     const total = useMemo(() => {
         return data.reduce((acc, curr) => acc + curr.value, 0)
     }, [data])
+
+    if (!shouldRender) return <ChartSkeleton height={280} />
 
     return (
         <ResponsiveContainer width="100%" height={280}>
@@ -106,7 +134,7 @@ export function InstrumentStatusChart({ data }: InstrumentStatusChartProps) {
                     dataKey="value"
                     strokeWidth={2}
                     stroke="hsl(var(--background))"
-                    animationDuration={800}
+                    animationDuration={300}
                     animationBegin={0}
                 >
                     {data.map((entry, index) => (
@@ -160,9 +188,13 @@ export function InstrumentStatusChart({ data }: InstrumentStatusChartProps) {
             </PieChart>
         </ResponsiveContainer>
     )
-}
+})
 
-export function InventoryStockChart({ data }: InventoryStockChartProps) {
+export const InventoryStockChart = memo(function InventoryStockChart({ data }: InventoryStockChartProps) {
+    const shouldRender = useIdleRender(50) // Second chart renders with slight delay
+
+    if (!shouldRender) return <ChartSkeleton />
+
     return (
         <ResponsiveContainer width="100%" height={250}>
             <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
@@ -195,7 +227,7 @@ export function InventoryStockChart({ data }: InventoryStockChartProps) {
                     fill="#22c55e"
                     radius={[4, 4, 0, 0]}
                     className="cursor-pointer"
-                    animationDuration={800}
+                    animationDuration={300}
                 />
                 <Bar
                     dataKey="menipis"
@@ -203,7 +235,7 @@ export function InventoryStockChart({ data }: InventoryStockChartProps) {
                     fill="#eab308"
                     radius={[4, 4, 0, 0]}
                     className="cursor-pointer"
-                    animationDuration={800}
+                    animationDuration={300}
                 />
                 <Bar
                     dataKey="habis"
@@ -216,9 +248,13 @@ export function InventoryStockChart({ data }: InventoryStockChartProps) {
             </BarChart>
         </ResponsiveContainer>
     )
-}
+})
 
-export function MonthlyUsageChart({ data }: MonthlyUsageChartProps) {
+export const MonthlyUsageChart = memo(function MonthlyUsageChart({ data }: MonthlyUsageChartProps) {
+    const shouldRender = useIdleRender(100) // Third chart renders last
+
+    if (!shouldRender) return <ChartSkeleton />
+
     return (
         <ResponsiveContainer width="100%" height={250}>
             <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
@@ -251,7 +287,7 @@ export function MonthlyUsageChart({ data }: MonthlyUsageChartProps) {
                     fill="#3b82f6"
                     radius={[4, 4, 0, 0]}
                     className="cursor-pointer"
-                    animationDuration={800}
+                    animationDuration={300}
                 />
                 <Bar
                     dataKey="consumable"
@@ -259,9 +295,9 @@ export function MonthlyUsageChart({ data }: MonthlyUsageChartProps) {
                     fill="#8b5cf6"
                     radius={[4, 4, 0, 0]}
                     className="cursor-pointer"
-                    animationDuration={800}
+                    animationDuration={300}
                 />
             </BarChart>
         </ResponsiveContainer>
     )
-}
+})

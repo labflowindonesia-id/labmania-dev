@@ -1,5 +1,6 @@
 "use client"
 
+import { toast } from "sonner"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +30,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Plus, Search, Warehouse, Loader2, RefreshCw, Trash2 } from "lucide-react"
+import { Plus, Search, Warehouse, Loader2, RefreshCw, Trash2, Pencil } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -57,6 +58,8 @@ interface WarehouseChemical {
     remainingAmount: string
     unit: string
     expiredDate: string
+    totalPrice?: string | number | null
+    unitCostBase?: string | number | null
     receivedBy?: string
     receivedByName?: string | null
     receivedByUser?: { fullName: string } | null
@@ -64,11 +67,6 @@ interface WarehouseChemical {
     daysUntilExpiry: number
 }
 
-interface CatalogItem {
-    id: string
-    name: string
-    category: 'reagent' | 'standard'
-}
 
 const statusConfig: Record<WarehouseItemStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     tersedia: { label: "Tersedia", variant: "default" },
@@ -86,9 +84,24 @@ const receivedByOptions = [
 export default function WarehouseChemicalsPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [typeFilter, setTypeFilter] = useState<string>("all")
+    const [sortBy, setSortBy] = useState<string>("fefo")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [editItem, setEditItem] = useState<WarehouseChemical | null>(null)
+    const [isEditLoading, setIsEditLoading] = useState(false)
     const [deleteId, setDeleteId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+
+    // Edit form state
+    const [editFormData, setEditFormData] = useState({
+        sizeValue: "",
+        sizeUnit: "ml",
+        remainingAmount: "",
+        unit: "ml",
+        expiredDate: "",
+        receivedByName: "",
+        totalPrice: "",
+    })
 
     // Form state
     const [formData, setFormData] = useState({
@@ -99,6 +112,7 @@ export default function WarehouseChemicalsPage() {
         unit: "ml",
         expDate: "",
         receivedBy: "",
+        totalPrice: "",
     })
 
     // Fetch catalogs with caching - reagents and standards
@@ -130,14 +144,28 @@ export default function WarehouseChemicalsPage() {
         }
     )
 
+    const { items: sampleCatalog, isLoading: isLoadingSamples } = useCatalogItems(
+        "/api/inventory/samples",
+        {
+            transform: (data: unknown) => {
+                const d = data as { data?: Array<{ id: string; sampleName: string }> }
+                return (d.data || []).map(s => ({
+                    id: s.id,
+                    name: s.sampleName,
+                    category: 'sample' as const,
+                }))
+            }
+        }
+    )
+
     // Combine catalogs
-    const catalogItems = [...reagentCatalog, ...standardCatalog]
-    const isLoadingCatalog = isLoadingReagents || isLoadingStandards
+    const catalogItems = [...reagentCatalog, ...standardCatalog, ...sampleCatalog]
+    const isLoadingCatalog = isLoadingReagents || isLoadingStandards || isLoadingSamples
 
     // Fetch warehouse chemicals from API with pagination
     const { data: chemicals, pagination, isLoading, error, refetch, search, setSearch, setPage } = useFetchPaginated<WarehouseChemical>(
         "/api/inventory/warehouse-chemicals",
-        { status: statusFilter, catalogType: typeFilter }
+        { status: statusFilter, catalogType: typeFilter, sortBy }
     )
     const displayItems = chemicals || []
 
@@ -149,7 +177,7 @@ export default function WarehouseChemicalsPage() {
             onSuccess: () => {
                 refetch()
                 setIsAddDialogOpen(false)
-                setFormData({ catalogId: "", catalogType: "", name: "", amount: "", unit: "ml", expDate: "", receivedBy: "" })
+                setFormData({ catalogId: "", catalogType: "", name: "", amount: "", unit: "ml", expDate: "", receivedBy: "", totalPrice: "" })
             },
         }
     )
@@ -181,6 +209,11 @@ export default function WarehouseChemicalsPage() {
         if (!formData.catalogId || !formData.amount || !formData.expDate) {
             return
         }
+        // Calculate unitCostBase from totalPrice and amount
+        const totalPrice = formData.totalPrice ? parseFloat(formData.totalPrice) : null;
+        const amount = parseFloat(formData.amount);
+        const unitCostBase = totalPrice && amount ? totalPrice / amount : null;
+
         await createChemical.mutate({
             catalogId: formData.catalogId,
             catalogType: formData.catalogType,
@@ -191,7 +224,9 @@ export default function WarehouseChemicalsPage() {
             remainingAmount: formData.amount,
             unit: formData.unit,
             expiredDate: formData.expDate,
-            receivedByName: formData.receivedBy, // Store static value in text field
+            totalPrice: totalPrice,
+            unitCostBase: unitCostBase,
+            receivedByName: formData.receivedBy,
             status: "tersedia",
         })
     }
@@ -208,6 +243,47 @@ export default function WarehouseChemicalsPage() {
         } finally {
             setIsDeleting(false)
             setDeleteId(null)
+        }
+    }
+
+    const handleEdit = (item: WarehouseChemical) => {
+        setEditItem(item)
+        setEditFormData({
+            sizeValue: item.sizeValue || "",
+            sizeUnit: item.sizeUnit || "ml",
+            remainingAmount: item.remainingAmount || "",
+            unit: item.unit || "ml",
+            expiredDate: item.expiredDate || "",
+            receivedByName: item.receivedByName || "",
+            totalPrice: item.totalPrice?.toString() || "",
+        })
+        setIsEditDialogOpen(true)
+    }
+
+    const handleEditSubmit = async () => {
+        if (!editItem) return
+
+        setIsEditLoading(true)
+        try {
+            const response = await fetch(`/api/inventory/warehouse-chemicals/${editItem.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editFormData),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Gagal menyimpan')
+            }
+
+            toast.success('Item berhasil diperbarui')
+            setIsEditDialogOpen(false)
+            setEditItem(null)
+            refetch()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Terjadi kesalahan')
+        } finally {
+            setIsEditLoading(false)
         }
     }
 
@@ -272,6 +348,7 @@ export default function WarehouseChemicalsPage() {
                                         <SelectContent>
                                             <SelectItem value="reagent">Reagen</SelectItem>
                                             <SelectItem value="standard">Standard</SelectItem>
+                                            <SelectItem value="sample">Sample</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -350,6 +427,25 @@ export default function WarehouseChemicalsPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                            {/* Harga per Botol */}
+                            <div className="space-y-2">
+                                <Label htmlFor="totalPrice">Harga per Botol (Rp)</Label>
+                                <Input
+                                    id="totalPrice"
+                                    type="number"
+                                    placeholder="Contoh: 500000"
+                                    value={formData.totalPrice}
+                                    onChange={(e) => setFormData({ ...formData, totalPrice: e.target.value })}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Harga satuan per botol/kemasan untuk perhitungan biaya training
+                                    {formData.totalPrice && formData.amount && (
+                                        <span className="ml-2 text-primary font-medium">
+                                            (Rp {(parseFloat(formData.totalPrice) / parseFloat(formData.amount)).toFixed(2)}/{formData.unit})
+                                        </span>
+                                    )}
+                                </p>
+                            </div>
                         </div>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -386,6 +482,7 @@ export default function WarehouseChemicalsPage() {
                         <SelectItem value="all">Semua Tipe</SelectItem>
                         <SelectItem value="reagent">Reagen</SelectItem>
                         <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="sample">Sample</SelectItem>
                     </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -397,6 +494,16 @@ export default function WarehouseChemicalsPage() {
                         <SelectItem value="tersedia">Tersedia</SelectItem>
                         <SelectItem value="sedang_digunakan">Sedang Digunakan</SelectItem>
                         <SelectItem value="habis">Habis</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Urutan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="fefo">FEFO (Exp Terdekat)</SelectItem>
+                        <SelectItem value="name">Nama A-Z</SelectItem>
+                        <SelectItem value="newest">Terbaru Diterima</SelectItem>
                     </SelectContent>
                 </Select>
                 <Button variant="outline" size="icon" onClick={() => refetch()}>
@@ -414,6 +521,7 @@ export default function WarehouseChemicalsPage() {
                             <TableHead>Tgl Terima</TableHead>
                             <TableHead className="text-right">Sisa</TableHead>
                             <TableHead className="text-right">Ukuran</TableHead>
+                            <TableHead className="text-right">Harga</TableHead>
                             <TableHead>Tgl Expired</TableHead>
                             <TableHead className="text-center">Hari</TableHead>
                             <TableHead>Status</TableHead>
@@ -428,9 +536,11 @@ export default function WarehouseChemicalsPage() {
                                 <TableCell>
                                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.catalogType === "reagent"
                                         ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                                        : "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200"
+                                        : item.catalogType === "sample"
+                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                            : "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200"
                                         }`}>
-                                        {item.catalogType === "reagent" ? "Reagen" : "Standard"}
+                                        {item.catalogType === "reagent" ? "Reagen" : item.catalogType === "sample" ? "Sample" : "Standard"}
                                     </span>
                                 </TableCell>
                                 <TableCell>{new Date(item.receivedDate).toLocaleDateString("id-ID")}</TableCell>
@@ -439,6 +549,9 @@ export default function WarehouseChemicalsPage() {
                                 </TableCell>
                                 <TableCell className="text-right">
                                     {item.sizeValue} {item.sizeUnit}
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                    {item.totalPrice ? `Rp ${Number(item.totalPrice).toLocaleString('id-ID')}` : '-'}
                                 </TableCell>
                                 <TableCell>{new Date(item.expiredDate).toLocaleDateString("id-ID")}</TableCell>
                                 <TableCell className={`text-center font-medium ${item.daysUntilExpiry < 0 ? "text-red-600" :
@@ -453,14 +566,23 @@ export default function WarehouseChemicalsPage() {
                                 </TableCell>
                                 <TableCell>{item.receivedByName || item.receivedByUser?.fullName || "-"}</TableCell>
                                 <TableCell className="text-center">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-destructive hover:text-destructive"
-                                        onClick={() => setDeleteId(item.id)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    <div className="flex justify-center gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleEdit(item)}
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => setDeleteId(item.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -484,6 +606,116 @@ export default function WarehouseChemicalsPage() {
                     onPageChange={setPage}
                 />
             )}
+
+            {/* Edit Dialog */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Edit Item</DialogTitle>
+                        <DialogDescription>
+                            Edit data untuk {editItem?.name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Ukuran Awal</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        value={editFormData.sizeValue}
+                                        onChange={(e) => setEditFormData({ ...editFormData, sizeValue: e.target.value })}
+                                    />
+                                    <Select
+                                        value={editFormData.sizeUnit}
+                                        onValueChange={(value) => setEditFormData({ ...editFormData, sizeUnit: value })}
+                                    >
+                                        <SelectTrigger className="w-20">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ml">ml</SelectItem>
+                                            <SelectItem value="L">L</SelectItem>
+                                            <SelectItem value="g">g</SelectItem>
+                                            <SelectItem value="kg">kg</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Sisa Jumlah</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        value={editFormData.remainingAmount}
+                                        onChange={(e) => setEditFormData({ ...editFormData, remainingAmount: e.target.value })}
+                                    />
+                                    <Select
+                                        value={editFormData.unit}
+                                        onValueChange={(value) => setEditFormData({ ...editFormData, unit: value })}
+                                    >
+                                        <SelectTrigger className="w-20">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ml">ml</SelectItem>
+                                            <SelectItem value="L">L</SelectItem>
+                                            <SelectItem value="g">g</SelectItem>
+                                            <SelectItem value="kg">kg</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Tanggal Expired</Label>
+                                <Input
+                                    type="date"
+                                    value={editFormData.expiredDate}
+                                    onChange={(e) => setEditFormData({ ...editFormData, expiredDate: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Diterima Oleh</Label>
+                                <Select
+                                    value={editFormData.receivedByName}
+                                    onValueChange={(value) => setEditFormData({ ...editFormData, receivedByName: value })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pilih penerima" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {receivedByOptions.map((opt) => (
+                                            <SelectItem key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Harga Per Botol (Rp)</Label>
+                            <Input
+                                type="number"
+                                placeholder="100000"
+                                value={editFormData.totalPrice}
+                                onChange={(e) => setEditFormData({ ...editFormData, totalPrice: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                            Batal
+                        </Button>
+                        <Button onClick={handleEditSubmit} disabled={isEditLoading}>
+                            {isEditLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Simpan
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

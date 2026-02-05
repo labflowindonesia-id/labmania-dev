@@ -21,7 +21,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, Edit, Users, Package, FlaskConical, Beaker, Plus, Trash2, Loader2, RefreshCw } from "lucide-react"
+import { ArrowLeft, Edit, Users, Package, FlaskConical, Beaker, Plus, Trash2, Loader2, RefreshCw, TestTube2 } from "lucide-react"
 import { useFetch } from "@/hooks/use-api"
 
 interface TrainingSetItem {
@@ -65,12 +65,19 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
         if (training) {
             setEditedName(training.trainingName)
             setEditedParticipants(training.participantsPerSet.toString())
-            setEditedItems(training.items.map(item => ({
+            const items = training.items.map(item => ({
                 itemType: item.itemType,
                 itemName: item.itemName,
                 quantity: item.quantity,
                 unit: item.unit || ""
-            })))
+            }))
+            setEditedItems(items)
+
+            // Fetch warehouse options for all unique item types from existing items
+            const uniqueTypes = [...new Set(items.map(i => i.itemType).filter(Boolean))]
+            uniqueTypes.forEach(type => {
+                fetchWarehouseOptions(type)
+            })
         }
         setIsEditDialogOpen(true)
     }
@@ -159,7 +166,8 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
         const equipment = items.filter(i => i.itemType === "barang" || i.itemType === "equipment")
         const consumables = items.filter(i => i.itemType === "consumable")
         const reagents = items.filter(i => i.itemType === "reagent" || i.itemType === "standard" || i.itemType === "reagent_standard")
-        return { equipment, consumables, reagents }
+        const samples = items.filter(i => i.itemType === "sample")
+        return { equipment, consumables, reagents, samples }
     }
 
     // Loading state
@@ -207,7 +215,7 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
         )
     }
 
-    const { equipment, consumables, reagents } = groupItemsByType(training.items)
+    const { equipment, consumables, reagents, samples } = groupItemsByType(training.items)
 
     return (
         <div className="space-y-6">
@@ -307,6 +315,31 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Samples Card */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <TestTube2 className="h-5 w-5 text-amber-500" />
+                            Sample
+                        </CardTitle>
+                        <CardDescription>Sampel untuk quality control</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {samples.length > 0 ? (
+                            <ul className="space-y-2">
+                                {samples.map((s, i) => (
+                                    <li key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                                        <span>{s.itemName}</span>
+                                        <span className="font-medium text-amber-600">{s.quantity} {s.unit}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-muted-foreground text-sm">Tidak ada sample</p>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Edit Dialog */}
@@ -366,6 +399,7 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
                                                 <SelectContent>
                                                     <SelectItem value="reagent">Reagen</SelectItem>
                                                     <SelectItem value="standard">Standard</SelectItem>
+                                                    <SelectItem value="sample">Sample</SelectItem>
                                                     <SelectItem value="barang">Barang</SelectItem>
                                                     <SelectItem value="consumable">Consumable</SelectItem>
                                                 </SelectContent>
